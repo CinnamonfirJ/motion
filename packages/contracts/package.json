@@ -1,0 +1,19 @@
+{
+  "name": "@moment/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MomentRewards — focused settlement contract on Monad (reaction-batch commitments + idempotent Moment settlement).",
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:monad": "hardhat run scripts/deploy.ts --network monadTestnet",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "node": "hardhat node",
+    "fund": "hardhat run scripts/fund.ts --network monadTestnet"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.17",
+    "dotenv": "^16.4.7"
+  }
+}

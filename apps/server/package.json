@@ -1,0 +1,26 @@
+{
+  "name": "@moment/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Moment backend — authoritative stream clock, reactions, Moment engine, Monad settlement, earnings. Owns all product-critical logic (PRD §9).",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@moment/core": "workspace:*",
+    "@fastify/cors": "^10.0.1",
+    "@fastify/websocket": "^11.0.1",
+    "ethers": "^6.13.4",
+    "fastify": "^5.1.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.10.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

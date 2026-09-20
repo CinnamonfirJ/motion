@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #070708;
+  color: #f7f7f5;
+  font-family: Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+/* Visible keyboard focus on dark surfaces (design §28). */
+:focus-visible {
+  outline: 2px solid #a7f46a;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Reduced motion (design §31): kill non-essential animation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+.celebration-gradient {
+  background-image: linear-gradient(135deg, #ff7a21 0%, #ff3f91 50%, #695cff 100%);
+}
+
+/* --- Talise-style scaffolding --- */
+/* Diagonal hatch strip used under content bands. */
+.hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(167, 244, 106, 0.06) 0,
+    rgba(167, 244, 106, 0.06) 1px,
+    transparent 1px,
+    transparent 7px
+  );
+}
+/* Dotted grid texture for hero / mockup bands. */
+.dotgrid {
+  background-image: radial-gradient(rgba(167, 244, 106, 0.1) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+/* Mono uppercase label helper. */
+.eyebrow {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+/* A tiny plus glyph positioned on a frame corner/intersection. */
+.plusmark {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  color: #a7f46a;
+  opacity: 0.7;
+  pointer-events: none;
+}
+.plusmark::before,
+.plusmark::after {
+  content: "";
+  position: absolute;
+  background: currentColor;
+}
+.plusmark::before {
+  left: 50%;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  transform: translateX(-50%);
+}
+.plusmark::after {
+  top: 50%;
+  left: 0;
+  height: 1px;
+  width: 100%;
+  transform: translateY(-50%);
+}
+.skeleton {
+  background: linear-gradient(90deg, #18181b 0px, #212126 200px, #18181b 400px);
+  background-size: 800px 100%;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

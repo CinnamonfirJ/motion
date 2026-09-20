@@ -1,0 +1,20 @@
+{
+  "name": "moment",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Moment — spot the livestream moment before everyone else. Cross-platform (web + iOS + Android) reaction-curation product settled on Monad.",
+  "packageManager": "pnpm@11.5.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:core": "pnpm --filter @moment/core build",
+    "test": "pnpm --filter @moment/core test run",
+    "test:core": "pnpm --filter @moment/core test run",
+    "test:contracts": "pnpm --filter @moment/contracts test",
+    "dev:server": "pnpm --filter @moment/server dev",
+    "dev:web": "pnpm --filter @moment/web dev",
+    "dev:mobile": "pnpm --filter @moment/mobile start",
+    "typecheck": "pnpm -r --if-present typecheck"
+  }
+}

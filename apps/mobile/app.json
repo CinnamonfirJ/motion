@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Moment",
+    "slug": "moment",
+    "scheme": "moment",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#070708",
+    "splash": {
+      "backgroundColor": "#070708",
+      "resizeMode": "contain"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.moment.demo"
+    },
+    "android": {
+      "package": "app.moment.demo",
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": ["expo-video"]
+  }
+}
