@@ -60,7 +60,10 @@ export interface Reaction {
   /** Server receive time, epoch ms. Authoritative ordering key. */
   serverTimeMs: number;
   type: ReactionType;
+  /** Source platform (a.k.a. `source` in the MOMENT reaction event model). */
   platform: Platform;
+  /** Accrued continuous watch time (ms) when the reaction landed — drives eligibility. */
+  watchTimeMs: number;
   /** Set once the reaction is folded into an on-chain batch commitment. */
   batchId: string | null;
 }
@@ -87,6 +90,10 @@ export interface MomentMetrics {
   peakRate: number;
   /** Offset within the clip (seconds) where the reaction peak occurred. §34 accessible summary. */
   peakOffsetSec: number;
+  /** Moment category from the dominant reaction (Funny / Hype / Wow). */
+  category: string;
+  /** Per-second reaction histogram over the clip. */
+  histogram: { second: number; fire: number; laugh: number; wow: number }[];
 }
 
 export interface Clip {

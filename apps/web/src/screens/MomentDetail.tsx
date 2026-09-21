@@ -5,6 +5,7 @@ import { Avatar, AvatarStack, Button, Skeleton, StatusRow, Pill } from "../compo
 import { ReactionGraph } from "../components/ReactionGraph";
 import { ReactionMix } from "../components/MomentCard";
 import { ClipPlayer, parseClip } from "../components/players";
+import { Histogram } from "../components/Histogram";
 import { SectionIndex } from "../components/scaffold";
 import { IconArrowLeft } from "../components/icons";
 import { shortAddr } from "../lib/format";
@@ -55,6 +56,13 @@ export function MomentDetail() {
           {moment.isLiveStream && <Pill tone="live">LIVE</Pill>}
         </div>
 
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 border border-lime/40 bg-lime/10 px-2 py-1 font-mono text-micro uppercase tracking-[0.12em] text-leaf">
+            🔥 Moment · {moment.metrics.category}
+          </span>
+          <span className="font-mono text-micro uppercase tracking-[0.1em] text-text-muted">{moment.views} views</span>
+        </div>
+
         <section>
           <h3 className="eyebrow text-micro text-text-muted mb-2">Why this became a Moment</h3>
           <div className="border border-border bg-surface1 p-4">
@@ -63,6 +71,14 @@ export function MomentDetail() {
               <ReactionMix mix={moment.metrics.mix} />
               <span className="text-bodysm text-text-secondary">{moment.metrics.totalReactions} reactions</span>
             </div>
+          </div>
+        </section>
+
+        <section>
+          <h3 className="eyebrow text-micro text-text-muted mb-2">Most replayed</h3>
+          <div className="border border-border bg-surface1 p-4">
+            <Histogram data={moment.metrics.histogram} height={72} />
+            <p className="mt-2 font-mono text-micro text-text-muted">Reaction intensity per second across the clip.</p>
           </div>
         </section>
 

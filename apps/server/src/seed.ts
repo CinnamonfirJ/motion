@@ -1,6 +1,7 @@
 import { deriveWallet, normalizeAuthId } from "./auth.js";
 import { Users, Streams } from "./store.js";
 import { ingestReaction } from "./momentEngine.js";
+import { seedWatch } from "./watch.js";
 import { newEventId, type ReactionType, type Platform, type User } from "@moment/core";
 
 /**
@@ -57,10 +58,19 @@ const REACTION_TYPES: ReactionType[] = ["fire", "laugh", "wow"];
 let bots: User[] = [];
 let liveStreamIds: string[] = [];
 
+/** Backdate demo-crowd watch time so bots are watch-eligible (>=15s) for spike counting. */
+function seedBotWatch(): void {
+  const now = Date.now();
+  for (const streamId of liveStreamIds) {
+    for (const b of bots) seedWatch(streamId, b.id, now - 40_000);
+  }
+}
+
 export function seedIfEmpty(): void {
   if (Streams.all().length > 0) {
     liveStreamIds = Streams.live().map((s) => s.id);
     bots = loadBots();
+    seedBotWatch();
     return;
   }
   const now = Date.now();
@@ -105,7 +115,33 @@ export function seedIfEmpty(): void {
       })
     );
   }
+  seedBotWatch();
   console.log(`[seed] created ${STREAMS.length} streams and ${bots.length} demo scouts`);
+}
+
+// ---------- demo panel drivers (Step 6) — simulate INPUTS into the real pipeline ----------
+/** Demo crowd names are always labelled "Demo crowd" client-side; here we expose them. */
+export function demoCrowd(): { id: string; displayName: string }[] {
+  return bots.map((b) => ({ id: b.id, displayName: b.displayName }));
+}
+
+/** Force a spike by sending a dense burst of eligible demo-crowd reactions into the REAL
+ *  spike engine (not by directly creating a Moment). */
+export function demoForceSpike(streamId: string, count = 24): number {
+  if (bots.length === 0) return 0;
+  seedBotWatch(); // ensure eligibility
+  let sent = 0;
+  for (let i = 0; i < count; i++) {
+    const bot = bots[i % bots.length]!;
+    react(bot, streamId, PLATFORMS[i % PLATFORMS.length]!);
+    sent++;
+  }
+  return sent;
+}
+
+/** Reset a stream's spike scheduler so demo runs can repeat. */
+export function demoResetStream(streamId: string): void {
+  spikeState.delete(streamId);
 }
 
 function loadBots(): User[] {

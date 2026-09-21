@@ -1,7 +1,7 @@
 import { formatUsd, statusLabel, type Moment, type Stream, type User, type FoundingCurator, type Settlement } from "@moment/core";
 import { env } from "./env.js";
 import { getChain } from "./chain.js";
-import { Users, Streams } from "./store.js";
+import { Users, Streams, Moments } from "./store.js";
 
 /** DTOs are JSON-safe (no bigint) and carry human display values. Clients never see raw units. */
 export const usd = (units: bigint) => formatUsd(units, env.UNITS_PER_USD);
@@ -79,6 +79,7 @@ export function momentView(m: Moment) {
     metrics: m.metrics,
     creator: creator ? { id: creator.id, displayName: creator.displayName, handle: creator.handle, avatarUrl: creator.avatarUrl } : null,
     streamTitle: stream?.title ?? "",
+    views: Moments.viewsFor(m.id),
     foundingCurators: m.foundingCurators.map(curatorView),
     foundingCuratorCount: m.foundingCurators.length,
     settlement: settlementView(m.settlement),

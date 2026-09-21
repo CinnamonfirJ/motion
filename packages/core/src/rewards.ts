@@ -11,13 +11,16 @@ export interface RewardDistribution {
   totalUnits: bigint;
   creatorUnits: bigint;
   curatorPoolUnits: bigint;
+  /** Platform cut (MOMENT REWARD_SPLIT — 10% by default). */
+  platformUnits: bigint;
   /** Per-curator allocation, index i => rank i+1. */
   curatorUnits: bigint[];
 }
 
 /**
- * Split a Moment's reward pool between the creator and the ranked Founding Curators.
- * `curatorCount` is the number of confirmed Founding Curators (0..N).
+ * Split a Moment's reward pool three ways — creator / Founding-Curator pool / platform —
+ * per MOMENT REWARD_SPLIT (70 / 20 / 10). `curatorCount` is the number of confirmed
+ * Founding Curators (0..N). INVARIANT: creator + curatorPool + platform === total exactly.
  */
 export function distributeReward(
   totalUnits: bigint,
@@ -26,21 +29,19 @@ export function distributeReward(
   curator: CuratorConfig
 ): RewardDistribution {
   if (totalUnits < 0n) throw new Error("totalUnits must be non-negative");
-  if (curator.distribution === "rank-weighted") {
-    // handled below
-  }
 
   const bps = BigInt(BASIS_POINTS);
   const creatorFloor = (totalUnits * BigInt(reward.creatorShareBps)) / bps;
   const curatorFloor = (totalUnits * BigInt(reward.curatorShareBps)) / bps;
+  const platformUnits = (totalUnits * BigInt(reward.platformShareBps)) / bps;
   // Any rounding dust from the bps split goes to the creator (deterministic, conserves total).
-  let creatorUnits = creatorFloor + (totalUnits - creatorFloor - curatorFloor);
-  let curatorPoolUnits = curatorFloor;
+  let creatorUnits = creatorFloor + (totalUnits - creatorFloor - curatorFloor - platformUnits);
+  const curatorPoolUnits = curatorFloor;
 
   // No curators (e.g. confirmation with zero qualifying scouts) — pool folds to creator.
   if (curatorCount <= 0) {
     creatorUnits += curatorPoolUnits;
-    return { totalUnits, creatorUnits, curatorPoolUnits: 0n, curatorUnits: [] };
+    return { totalUnits, creatorUnits, curatorPoolUnits: 0n, platformUnits, curatorUnits: [] };
   }
 
   const weights = resolveWeights(curatorCount, curator);
@@ -51,7 +52,7 @@ export function distributeReward(
   if (sum !== curatorPoolUnits) {
     throw new Error("reward allocation did not conserve curator pool");
   }
-  return { totalUnits, creatorUnits, curatorPoolUnits, curatorUnits };
+  return { totalUnits, creatorUnits, curatorPoolUnits, platformUnits, curatorUnits };
 }
 
 function resolveWeights(count: number, cfg: CuratorConfig): number[] {

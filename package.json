@@ -7,6 +7,12 @@
   "engines": {
     "node": ">=20"
   },
+  "pnpm": {
+    "overrides": {
+      "react": "19.2.3",
+      "react-dom": "19.2.3"
+    }
+  },
   "scripts": {
     "build:core": "pnpm --filter @moment/core build",
     "test": "pnpm --filter @moment/core test run",

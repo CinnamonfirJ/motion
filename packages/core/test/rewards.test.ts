@@ -9,18 +9,19 @@ function sum(xs: bigint[]): bigint {
 }
 
 describe("distributeReward", () => {
-  it("conserves the total exactly (no unit created or lost)", () => {
+  it("conserves the total exactly across all three parties (no unit created or lost)", () => {
     const total = 1_000_000_000_000_000_001n; // deliberately not divisible
     const d = distributeReward(total, 5, reward, curator);
-    expect(d.creatorUnits + sum(d.curatorUnits)).toBe(total);
+    expect(d.creatorUnits + sum(d.curatorUnits) + d.platformUnits).toBe(total);
     expect(sum(d.curatorUnits)).toBe(d.curatorPoolUnits);
   });
 
-  it("applies the 70/30 split", () => {
+  it("applies the 70/20/10 split (creator / curators / platform)", () => {
     const total = 1_000_000n;
     const d = distributeReward(total, 5, reward, curator);
     expect(d.creatorUnits).toBe(700_000n);
-    expect(d.curatorPoolUnits).toBe(300_000n);
+    expect(d.curatorPoolUnits).toBe(200_000n);
+    expect(d.platformUnits).toBe(100_000n);
   });
 
   it("rank-weighted distribution favors earlier ranks (5/4/3/2/1)", () => {
@@ -33,25 +34,26 @@ describe("distributeReward", () => {
     expect(d.curatorUnits[0]! > d.curatorUnits[4]!).toBe(true);
   });
 
-  it("equal distribution splits the pool evenly with deterministic remainder", () => {
+  it("equal distribution splits the curator pool evenly with deterministic remainder", () => {
     const cfg = makeConfig({ curator: { distribution: "equal" } }).curator;
-    const total = 1_000_000n;
-    const d = distributeReward(total, 3, reward, cfg);
+    const total = 1_500_000n;
+    const d = distributeReward(total, 3, reward, cfg); // curator pool = 20% = 300000
     expect(sum(d.curatorUnits)).toBe(300_000n);
-    // 300000/3 = 100000 exactly
     expect(d.curatorUnits).toEqual([100_000n, 100_000n, 100_000n]);
   });
 
-  it("folds the curator pool into the creator when there are no curators", () => {
+  it("folds the curator pool into the creator when there are no curators (platform still cut)", () => {
     const total = 1_000_000n;
     const d = distributeReward(total, 0, reward, curator);
-    expect(d.creatorUnits).toBe(total);
+    expect(d.platformUnits).toBe(100_000n);
+    expect(d.creatorUnits).toBe(900_000n); // 70% + 20% folded
+    expect(d.creatorUnits + d.platformUnits).toBe(total);
     expect(d.curatorUnits).toEqual([]);
   });
 
-  it("handles a 1-unit pool without loss", () => {
+  it("handles a 1-unit pool without loss across all parties", () => {
     const d = distributeReward(1n, 5, reward, curator);
-    expect(d.creatorUnits + sum(d.curatorUnits)).toBe(1n);
+    expect(d.creatorUnits + sum(d.curatorUnits) + d.platformUnits).toBe(1n);
   });
 });
 

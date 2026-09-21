@@ -1,11 +1,14 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, setToken, getToken, type UserDTO } from "../lib/api";
 import { realtime } from "../lib/realtime";
+import { registerPasskey, loginPasskey } from "../lib/passkey";
 
 interface SessionCtx {
   user: UserDTO | null;
   loading: boolean;
   login: (email: string, provider?: string, displayName?: string) => Promise<void>;
+  signInPasskey: () => Promise<void>;
+  createPasskey: (displayName: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -32,12 +35,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const login = async (email: string, provider = "email", displayName?: string) => {
-    const { token, user } = await api.login(email, provider, displayName);
+  const establish = async (token: string, user: UserDTO) => {
     setToken(token);
     setUser(user);
     realtime.connect();
     await realtime.syncClock();
+  };
+
+  const login = async (email: string, provider = "email", displayName?: string) => {
+    const { token, user } = await api.login(email, provider, displayName);
+    await establish(token, user);
+  };
+
+  const signInPasskey = async () => {
+    const { token, user } = await loginPasskey();
+    await establish(token, user);
+  };
+
+  const createPasskey = async (displayName: string) => {
+    const { token, user } = await registerPasskey(displayName);
+    await establish(token, user);
   };
 
   const logout = () => {
@@ -45,5 +62,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  return <Ctx.Provider value={{ user, loading, login, logout }}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={{ user, loading, login, signInPasskey, createPasskey, logout }}>{children}</Ctx.Provider>
+  );
 }

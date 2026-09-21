@@ -9,6 +9,7 @@ import { Moments } from "./screens/Moments";
 import { MomentDetail } from "./screens/MomentDetail";
 import { Earnings } from "./screens/Earnings";
 import { Profile } from "./screens/Profile";
+import { Demo } from "./screens/Demo";
 
 function OfflineBanner() {
   const [offline, setOffline] = useState(!navigator.onLine);
@@ -38,19 +39,25 @@ function Gate() {
         <div className="h-8 w-8 rounded-full border-2 border-lime border-t-transparent animate-spin" />
       </div>
     );
-  if (!user) return <SignIn />;
-
   return (
     <Routes>
-      <Route path="/live/:id" element={<Live />} />
-      <Route element={<Layout />}>
-        <Route path="/" element={<Home />} />
-        <Route path="/moments" element={<Moments />} />
-        <Route path="/moments/:id" element={<MomentDetail />} />
-        <Route path="/earnings" element={<Earnings />} />
-        <Route path="/profile" element={<Profile />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Hidden demo panel — reachable by URL only, no login required (for judging). */}
+      <Route path="/demo" element={<Demo />} />
+      {user ? (
+        <>
+          <Route path="/live/:id" element={<Live />} />
+          <Route element={<Layout />}>
+            <Route path="/" element={<Home />} />
+            <Route path="/moments" element={<Moments />} />
+            <Route path="/moments/:id" element={<MomentDetail />} />
+            <Route path="/earnings" element={<Earnings />} />
+            <Route path="/profile" element={<Profile />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </>
+      ) : (
+        <Route path="*" element={<SignIn />} />
+      )}
     </Routes>
   );
 }

@@ -66,6 +66,29 @@ export function ReactionRail({ onReact }: { onReact: (t: ReactionType) => void }
   );
 }
 
+/** Live reaction-wave strip — a lightweight rolling bar graph of recent reaction activity.
+ *  Quiet → rising → spike. Uses electric blue (--color-4). Not a trading chart. */
+export function ReactionWave({ data, heatingUp }: { data: number[]; heatingUp: boolean }) {
+  const N = 24;
+  const bars = [...Array(Math.max(0, N - data.length)).fill(0), ...data].slice(-N);
+  const max = Math.max(1, ...bars);
+  return (
+    <div className="flex h-8 items-end gap-[3px]" aria-hidden>
+      {bars.map((v, i) => (
+        <div
+          key={i}
+          className="w-1 rounded-sm transition-all duration-quick"
+          style={{
+            height: `${Math.max(6, (v / max) * 100)}%`,
+            background: heatingUp ? "#8C64FF" : "#50C8FF",
+            opacity: 0.35 + (i / N) * 0.65,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 /** Live pulse indicator (design §7.5) — quiet by default, "Activity rising" when heating up. */
 export function LivePulse({ heatingUp }: { heatingUp: boolean }) {
   if (!heatingUp) return <div className="h-5" aria-hidden />;

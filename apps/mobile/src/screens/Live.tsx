@@ -26,6 +26,13 @@ export function Live() {
   const [detecting, setDetecting] = useState(false);
   const [forming, setForming] = useState(false);
   const [celebration, setCelebration] = useState<{ rank: number; rewardUsd: string; momentId: string } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const player = useVideoPlayer(stream?.videoUrl ?? "", (p) => {
     p.loop = true;
@@ -133,7 +140,7 @@ export function Live() {
 
         {detecting ? (
           <View accessibilityLiveRegion="assertive" style={{ position: "absolute", inset: 0, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.45)" }}>
-            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(167,244,106,0.15)", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(140,100,255,0.15)", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
               <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: color.lime }} />
             </View>
             <Text style={{ color: color.text, ...type.h1 }}>MOMENT DETECTED</Text>
@@ -156,8 +163,43 @@ export function Live() {
             </Pressable>
           ))}
         </View>
+        <View style={{ flexDirection: "row", gap: 12 }}>
+          <Pressable
+            onPress={async () => {
+              try {
+                const r = await api.tip(id);
+                setToast(`Tip sent · ${r.amountUsd}`);
+              } catch {
+                setToast("Tip is taking longer than expected.");
+              }
+            }}
+            style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}
+          >
+            <Text style={{ ...eyebrow(11), color: color.textSecondary }}>♥ Tip</Text>
+          </Pressable>
+          <Pressable
+            onPress={async () => {
+              try {
+                const s = sync.current;
+                const at = s ? streamTimeMs(s.startedAt, realtime.serverNow()) : 0;
+                await api.clip(id, at);
+                setToast("Clip saved to your finds");
+              } catch {
+                setToast("Clip is still processing.");
+              }
+            }}
+            style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}
+          >
+            <Text style={{ ...eyebrow(11), color: color.textSecondary }}>✂ Clip it</Text>
+          </Pressable>
+        </View>
         <Text style={{ color: color.textMuted, ...type.micro }}>Tap to react</Text>
       </View>
+      {toast ? (
+        <View style={{ position: "absolute", bottom: 100, alignSelf: "center", borderWidth: 1, borderColor: color.success, backgroundColor: color.surface2, paddingHorizontal: 16, paddingVertical: 10 }}>
+          <Text style={{ color: color.text, ...type.body }}>{toast}</Text>
+        </View>
+      ) : null}
 
       <Modal visible={!!celebration} transparent animationType="fade">
         {celebration ? (
@@ -174,8 +216,8 @@ export function Live() {
                 <Text style={{ color: color.warning, ...eyebrow(11), marginTop: 2 }}>○ Settling</Text>
               </View>
               <View style={{ marginTop: 24, width: "100%", gap: 8 }}>
-                <Pressable onPress={() => { const c = celebration; setCelebration(null); nav.navigate("MomentDetail", { id: c.momentId }); }} style={{ backgroundColor: color.lime, borderRadius: radius.sm, minHeight: 48, alignItems: "center", justifyContent: "center" }}>
-                  <Text style={{ color: color.night, ...eyebrow(12) }}>Watch Moment</Text>
+                <Pressable onPress={() => { const c = celebration; setCelebration(null); nav.navigate("MomentDetail", { id: c.momentId }); }} style={{ backgroundColor: color.brand, borderRadius: radius.sm, minHeight: 48, alignItems: "center", justifyContent: "center" }}>
+                  <Text style={{ color: "#FFFFFF", ...eyebrow(12) }}>Watch Moment</Text>
                 </Pressable>
                 <Pressable onPress={() => setCelebration(null)} style={{ minHeight: 44, alignItems: "center", justifyContent: "center" }}>
                   <Text style={{ color: color.textSecondary }}>Done</Text>

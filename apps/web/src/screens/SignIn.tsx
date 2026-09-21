@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "../state/session";
 import { Button, Avatar } from "../components/ui";
 import { ReactionGraph } from "../components/ReactionGraph";
 import { PlusFrame, PlusMark, PlusRule, SectionIndex, TagChip, Hatch, Accordion } from "../components/scaffold";
-import { IconArrowRight, IconCheck, IconSpark } from "../components/icons";
+import { IconArrowRight, IconCheck, IconSpark, IconFingerprint } from "../components/icons";
+import { ThemeToggle } from "../components/ThemeToggle";
+import { isPasskeySupported } from "../lib/passkey";
 
 function Logo() {
   return (
     <div className="flex items-center gap-2">
-      <span className="grid h-7 w-7 place-items-center bg-lime text-ink font-bold">M</span>
+      <span className="grid h-7 w-7 place-items-center bg-brand text-white font-bold">M</span>
       <span className="text-h3 font-bold tracking-tight">Moment</span>
     </div>
   );
@@ -28,9 +30,12 @@ export function SignIn() {
             <button onClick={() => scrollTo("features")} className="hover:text-text">Features</button>
             <button onClick={() => scrollTo("faq")} className="hover:text-text">FAQ</button>
           </nav>
-          <Button variant="secondary" className="!min-h-[40px]" onClick={() => scrollTo("start")}>
-            Sign in
-          </Button>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button variant="secondary" className="!min-h-[40px]" onClick={() => scrollTo("start")}>
+              Sign in
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -225,7 +230,7 @@ function HowItWorks() {
 }
 
 const FAQ_ITEMS = [
-  { q: "Do I need to know anything about crypto?", a: "No. You sign in with email or Google and your balance shows in plain dollars. No seed phrase, no wallet to install, no gas to buy — the blockchain part stays invisible." },
+  { q: "Do I need to know anything about crypto?", a: "No. You sign in with a passkey — Face ID, Windows Hello or your fingerprint — and your passkey creates an account on Monad. Your balance shows in plain dollars. No seed phrase, no wallet to install, no gas to buy." },
   { q: "How do I earn?", a: "React early to streams. When enough people react to the same moment, the earliest qualifying scouts become Founding Curators and share the reward for that Moment." },
   { q: "What is a Moment?", a: "A 35-second clip — 15 seconds before a reaction spike and 20 seconds after — automatically captured when the crowd's reactions accelerate past the stream's normal rhythm." },
   { q: "Where does the reward come from?", a: "A pre-funded reward pool on Monad. Each confirmed Moment splits its reward between the creator and the Founding Curators, settled in a real onchain transaction." },
@@ -249,23 +254,32 @@ function Faq() {
   );
 }
 
-/** The actual auth — a full section, not a lone input. */
+/** The actual auth — passkey-first (biometric), a full section, not a lone input. */
 function StartSection() {
-  const { login } = useSession();
+  const { login, signInPasskey, createPasskey } = useSession();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [showEmail, setShowEmail] = useState(false);
+  const [passkeys, setPasskeys] = useState(true);
+  const [busy, setBusy] = useState<null | "signin" | "create" | "email">(null);
   const [error, setError] = useState<string | null>(null);
 
-  const doLogin = async (seed?: string) => {
-    const addr = seed ?? email;
-    if (!addr.trim()) return;
-    setBusy(true);
+  useEffect(() => {
+    isPasskeySupported().then(setPasskeys);
+  }, []);
+
+  const run = async (kind: "signin" | "create" | "email", fn: () => Promise<void>, cancelMsg: string) => {
+    setBusy(kind);
     setError(null);
     try {
-      await login(addr.trim());
-    } catch {
-      setError("Couldn't sign you in. Try again in a moment.");
-      setBusy(false);
+      await fn();
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      if (/no-passkey-account/.test(msg)) setError("No passkey on this device yet — create one below.");
+      else if (/cancel|NotAllowed/i.test(msg)) setError(cancelMsg);
+      else setError("Couldn't sign you in. Try again in a moment.");
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -277,10 +291,11 @@ function StartSection() {
             <TagChip className="self-start">Start free</TagChip>
             <h2 className="mt-5 text-h1 md:text-display">Your first find is out there.</h2>
             <p className="mt-4 max-w-sm font-mono text-body text-text-secondary">
-              Sign in and open a live stream. React when something feels worth catching — the rest happens on its own.
+              Your passkey creates an account on Monad. No seed phrase. Unlock with Face ID, Windows Hello or your
+              fingerprint — the crypto stays out of the way.
             </p>
             <ul className="mt-6 space-y-3">
-              {["No seed phrase or wallet setup", "Wallet created automatically", "Same account across web + mobile"].map((t) => (
+              {["Sign in with your device biometric", "Monad account created behind your passkey", "No seed phrase, no wallet to install"].map((t) => (
                 <li key={t} className="flex items-center gap-3 border-b border-border pb-3 font-mono text-bodysm text-text-secondary">
                   <IconCheck size={16} className="text-leaf" />
                   {t}
@@ -291,27 +306,57 @@ function StartSection() {
 
           <div className="flex flex-col justify-center gap-3 border border-border bg-surface1 p-6">
             <div className="eyebrow text-micro text-text-muted">Sign in</div>
-            <Button variant="primary" className="w-full" onClick={() => doLogin(`demo${Math.floor(Math.random() * 100000)}@moment.app`)} disabled={busy}>
-              Continue with Google <IconArrowRight size={16} />
-            </Button>
-            <div className="flex items-center gap-3 py-1 font-mono text-micro uppercase tracking-[0.14em] text-text-muted">
-              <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
-            </div>
-            <input
-              type="email"
-              inputMode="email"
-              placeholder="you@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && doLogin()}
-              aria-label="Email address"
-              className="w-full border border-border bg-surface2 px-4 py-3 font-mono text-body text-text placeholder:text-text-muted"
-            />
-            <Button variant="secondary" className="w-full" onClick={() => doLogin()} disabled={busy || !email.trim()}>
-              {busy ? "Signing in…" : "Continue with email"}
-            </Button>
+
+            {passkeys ? (
+              <>
+                <Button variant="primary" className="w-full" onClick={() => run("signin", signInPasskey, "Sign-in cancelled.")} disabled={busy !== null}>
+                  {busy === "signin" ? "Waiting for passkey…" : "Sign in with passkey"} <IconFingerprint size={16} />
+                </Button>
+                <input
+                  type="text"
+                  placeholder="Display name (for a new account)"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  aria-label="Display name"
+                  className="w-full border border-border bg-surface2 px-4 py-3 font-mono text-body text-text placeholder:text-text-muted"
+                />
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => run("create", () => createPasskey(name.trim() || "Scout"), "Passkey creation cancelled.")}
+                  disabled={busy !== null}
+                >
+                  {busy === "create" ? "Creating passkey…" : "Create a passkey"}
+                </Button>
+              </>
+            ) : (
+              <p className="font-mono text-bodysm text-text-secondary">
+                This device doesn't support passkeys — use email below.
+              </p>
+            )}
+
+            <button onClick={() => setShowEmail((v) => !v)} className="self-start font-mono text-micro uppercase tracking-[0.12em] text-text-muted hover:text-text">
+              {showEmail ? "Hide email" : "Use email instead"}
+            </button>
+            {showEmail && (
+              <div className="flex flex-col gap-2">
+                <input
+                  type="email"
+                  inputMode="email"
+                  placeholder="you@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  aria-label="Email address"
+                  className="w-full border border-border bg-surface2 px-4 py-3 font-mono text-body text-text placeholder:text-text-muted"
+                />
+                <Button variant="secondary" className="w-full" onClick={() => run("email", () => login(email.trim()), "")} disabled={busy !== null || !email.trim()}>
+                  {busy === "email" ? "Signing in…" : "Continue with email"}
+                </Button>
+              </div>
+            )}
+
             {error && <p className="font-mono text-bodysm text-error">{error}</p>}
-            <p className="font-mono text-micro text-text-muted">Your wallet is created automatically. No seed phrase.</p>
+            <p className="font-mono text-micro text-text-muted">Your passkey creates an account on Monad. No seed phrase.</p>
           </div>
         </div>
       </PlusFrame>

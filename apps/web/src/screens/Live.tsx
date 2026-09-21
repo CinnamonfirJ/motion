@@ -8,6 +8,7 @@ import { LivePlayer } from "../components/players";
 import {
   ReactionRail,
   LivePulse,
+  ReactionWave,
   MomentDetectedOverlay,
   MomentFormingPill,
   CuratorCelebration,
@@ -27,6 +28,7 @@ export function Live() {
   const [forming, setForming] = useState(false);
   const [celebration, setCelebration] = useState<{ rank: number; rewardUsd: string; momentId: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [wave, setWave] = useState<number[]>([]);
 
   // Load stream + clock sync.
   useEffect(() => {
@@ -54,6 +56,7 @@ export function Live() {
       switch (ev.t) {
         case "activity":
           setHeatingUp(ev.heatingUp);
+          setWave((w) => [...w.slice(-23), ev.ratePerSec]);
           break;
         case "viewers":
           setViewerCount(ev.count);
@@ -142,8 +145,39 @@ export function Live() {
 
       {/* reaction region */}
       <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6" style={{ paddingBottom: "max(24px, env(safe-area-inset-bottom))" }}>
+        <ReactionWave data={wave} heatingUp={heatingUp} />
         <LivePulse heatingUp={heatingUp} />
         <ReactionRail onReact={react} />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              try {
+                const r = await api.tip(id);
+                setToast(`Tip sent · ${r.amountUsd}`);
+              } catch {
+                setToast("Tip is taking longer than expected.");
+              }
+            }}
+            className="inline-flex items-center gap-1.5 border border-border bg-surface2 px-3 py-1.5 font-mono text-micro uppercase tracking-[0.1em] text-text-secondary hover:text-text"
+          >
+            ♥ Tip
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                const s = sync.current;
+                const at = s ? streamTimeMs(s.startedAt, realtime.serverNow()) : 0;
+                await api.clip(id, at);
+                setToast("Clip saved to your finds");
+              } catch {
+                setToast("Clip is still processing.");
+              }
+            }}
+            className="inline-flex items-center gap-1.5 border border-border bg-surface2 px-3 py-1.5 font-mono text-micro uppercase tracking-[0.1em] text-text-secondary hover:text-text"
+          >
+            ✂ Clip it
+          </button>
+        </div>
         <p className="text-micro text-text-muted">Tap to react · keys 1 · 2 · 3</p>
       </div>
 

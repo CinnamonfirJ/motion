@@ -120,9 +120,9 @@ export const Reactions = {
     const existing = db.prepare("SELECT * FROM reactions WHERE eventId = ?").get(r.eventId) as any;
     if (existing) return { reaction: mapReaction(existing), created: false };
     db.prepare(
-      `INSERT INTO reactions (id, eventId, userId, walletAddress, streamId, streamTimeMs, serverTimeMs, type, platform, batchId)
-       VALUES (@id,@eventId,@userId,@walletAddress,@streamId,@streamTimeMs,@serverTimeMs,@type,@platform,@batchId)`
-    ).run({ ...r, batchId: r.batchId ?? null });
+      `INSERT INTO reactions (id, eventId, userId, walletAddress, streamId, streamTimeMs, serverTimeMs, type, platform, watchTimeMs, batchId)
+       VALUES (@id,@eventId,@userId,@walletAddress,@streamId,@streamTimeMs,@serverTimeMs,@type,@platform,@watchTimeMs,@batchId)`
+    ).run({ ...r, watchTimeMs: r.watchTimeMs ?? 0, batchId: r.batchId ?? null });
     return { reaction: r, created: true };
   },
   /** Reactions for a stream within [fromServerTime, toServerTime]. */
@@ -164,6 +164,7 @@ function mapReaction(r: any): Reaction & { eventId: string } {
     serverTimeMs: r.serverTimeMs,
     type: r.type as ReactionType,
     platform: r.platform as Platform,
+    watchTimeMs: r.watchTimeMs ?? 0,
     batchId: r.batchId,
   };
 }
@@ -249,6 +250,22 @@ export const Moments = {
     return (
       db.prepare("SELECT * FROM founding_curators WHERE momentId = ? ORDER BY rank ASC").all(momentId) as any[]
     ).map(mapCurator);
+  },
+  /** Moment views (success signal). */
+  incrementViews(momentId: string): number {
+    db.prepare(
+      "INSERT INTO moment_views (momentId, count) VALUES (?, 1) ON CONFLICT(momentId) DO UPDATE SET count = count + 1"
+    ).run(momentId);
+    return this.viewsFor(momentId);
+  },
+  viewsFor(momentId: string): number {
+    const r = db.prepare("SELECT count FROM moment_views WHERE momentId = ?").get(momentId) as any;
+    return r?.count ?? 0;
+  },
+  /** Basic reputation: how many Moments this user has been a Founding Curator of. */
+  reputationFor(userId: string): number {
+    const r = db.prepare("SELECT COUNT(*) c FROM founding_curators WHERE userId = ?").get(userId) as any;
+    return r?.c ?? 0;
   },
   curatorMomentsFor(userId: string): { moment: Moment; curator: FoundingCurator }[] {
     const rows = db.prepare("SELECT momentId FROM founding_curators WHERE userId = ?").all(userId) as any[];

@@ -83,6 +83,16 @@ export const IconSound = (p: P) => (
     <path d="M16 8.5a5 5 0 0 1 0 7" />
   </S>
 );
+export const IconFingerprint = (p: P) => (
+  <S {...p}>
+    <path d="M12 11a2 2 0 0 1 2 2c0 3 .3 4.5-.6 6.5" />
+    <path d="M8.2 8.6a5 5 0 0 1 8.3 4.4c0 2.3.2 3.6-.5 5.5" />
+    <path d="M5 12a7 7 0 0 1 3-5.8" />
+    <path d="M6 15c.4 2 .5 3.4-.2 5.2" />
+    <path d="M12 15c0 3-.2 4.4-.9 6" />
+    <path d="M19 13c0 4-.4 5.5-1.2 7.4" />
+  </S>
+);
 export const IconReceipt = (p: P) => (
   <S {...p}>
     <path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z" />

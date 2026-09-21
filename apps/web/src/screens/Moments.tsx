@@ -31,7 +31,7 @@ export function Moments() {
             key={f}
             onClick={() => setFilter(f)}
             className={`border px-3.5 py-1.5 font-mono text-micro uppercase tracking-[0.1em] transition-colors ${
-              filter === f ? "border-lime bg-lime text-ink" : "border-border bg-surface1 text-text-secondary hover:text-text"
+              filter === f ? "border-lime bg-brand text-white" : "border-border bg-surface1 text-text-secondary hover:text-text"
             }`}
           >
             {f}

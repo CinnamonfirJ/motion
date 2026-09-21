@@ -2,44 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Light is the default (marketing site + browsing), matching the reference. The video
-   theater (Live) and video overlays opt into dark via [data-theme="dark"]. */
+/* ===================================================================
+   MOMENT design tokens — single source of truth (purple brand).
+   Define the 20-color palette ONCE, then map semantic tokens to it.
+   DEFAULT theme is LIGHT; dark mode is opt-in via [data-theme="dark"].
+   Accents stay < ~10% of any screen.
+   =================================================================== */
 :root {
+  /* Raw MOMENT palette (do not use these directly in components — use semantics below). */
+  --color-1: #000000;
+  --color-2: #b4ffa0;
+  --color-3: #8cffc8;
+  --color-4: #50c8ff;
+  --color-5: #28283c;
+  --color-6: #505064;
+  --color-7: #78788c;
+  --color-8: #a0a0b4;
+  --color-9: #5028dc;
+  --color-10: #6450a0;
+  --color-11: #8c64ff;
+  --color-12: #c8b4ff;
+  --color-13: #7850c8;
+  --color-14: #dc78ff;
+  --color-15: #c88cc8;
+  --color-16: #ffb4dc;
+  --color-17: #ff78b4;
+  --color-18: #f06464;
+  --color-19: #f0dca0;
+  --color-20: #ffffff;
+
+  /* ---- DEFAULT = LIGHT (purple on a soft near-white). Dark mode is opt-in below. ---- */
   color-scheme: light;
-  --c-night: #eceee6; /* page background (warm off-white) */
-  --c-surface1: #ffffff;
-  --c-surface2: #f4f5ee;
-  --c-surface3: #e7e8de;
-  --c-border: #d8dacd;
-  --c-border-strong: #bfc1b1;
-  --c-text: #15160e;
-  --c-text-secondary: #525446;
-  --c-text-muted: #7f8173;
-  --c-text-disabled: #a9ab9c;
-  --c-leaf: #2f6a12; /* accent TEXT on light (green, readable) */
-  --scaffold-line: rgba(47, 106, 18, 0.12);
-  --scaffold-dot: rgba(47, 106, 18, 0.14);
-  --skel-a: #eceee6;
-  --skel-b: #f6f7f1;
+  --c-night: #f6f5fb; /* app background — soft lavender-white */
+  --c-surface1: #ffffff; /* cards / surfaces */
+  --c-surface2: #f1f0f8; /* elevated surface */
+  --c-surface3: #e7e5f2; /* selected / hover surface */
+  --c-border: #e2e0ee;
+  --c-border-strong: #c9c4e4; /* emphasized / hover outlines */
+  --c-text: #1a1826; /* near-black with a purple hint */
+  --c-text-secondary: #5a5570;
+  --c-text-muted: #8a85a0;
+  --c-text-disabled: #b4afc6;
+  /* Accent TEXT (links, active nav, focus, selected) — deep purple, readable on light */
+  --c-leaf: var(--color-9);
+
+  /* Scaffolding textures + skeletons (purple, light) */
+  --scaffold-line: rgba(80, 40, 220, 0.1);
+  --scaffold-dot: rgba(80, 40, 220, 0.12);
+  --skel-a: #f1f0f8;
+  --skel-b: #faf9ff;
 }
 
+/* The video theater still opts into this dark theme explicitly; keep identical values so
+   over-video wrappers stay consistent with the (already dark) app. */
 [data-theme="dark"] {
   color-scheme: dark;
-  --c-night: #070708;
-  --c-surface1: #111113;
-  --c-surface2: #18181b;
-  --c-surface3: #212126;
-  --c-border: #2a2a30;
-  --c-border-strong: #3b3b43;
-  --c-text: #f7f7f5;
-  --c-text-secondary: #b6b6bc;
-  --c-text-muted: #77777f;
-  --c-text-disabled: #525259;
-  --c-leaf: #a7f46a; /* accent text goes bright on dark */
-  --scaffold-line: rgba(167, 244, 106, 0.06);
-  --scaffold-dot: rgba(167, 244, 106, 0.1);
-  --skel-a: #18181b;
-  --skel-b: #212126;
+  --c-night: #000000;
+  --c-surface1: #28283c;
+  --c-surface2: #323248;
+  --c-surface3: #3c3c54;
+  --c-border: #505064;
+  --c-border-strong: #6450a0;
+  --c-text: #ffffff;
+  --c-text-secondary: #a0a0b4;
+  --c-text-muted: #78788c;
+  --c-text-disabled: #6e6e82;
+  --c-leaf: #8c64ff;
+  --scaffold-line: rgba(140, 100, 255, 0.1);
+  --scaffold-dot: rgba(140, 100, 255, 0.14);
+  --skel-a: #28283c;
+  --skel-b: #323248;
 }
 
 html,
@@ -76,7 +108,8 @@ body {
 }
 
 .celebration-gradient {
-  background-image: linear-gradient(135deg, #ff7a21 0%, #ff3f91 50%, #695cff 100%);
+  /* MOMENT brand gradient: --color-9 → --color-11 → --color-14 */
+  background-image: linear-gradient(135deg, var(--color-9) 0%, var(--color-11) 50%, var(--color-14) 100%);
 }
 
 /* --- Talise-style scaffolding --- */

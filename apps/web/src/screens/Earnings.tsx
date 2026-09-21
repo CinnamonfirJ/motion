@@ -24,7 +24,7 @@ export function Earnings() {
         {creator?.momentsGenerated > 0 && (
           <div className="flex border border-border">
             {(["scout", "creator"] as const).map((m) => (
-              <button key={m} onClick={() => setMode(m)} className={`px-3 py-1.5 font-mono text-micro uppercase tracking-[0.1em] ${mode === m ? "bg-lime text-ink" : "bg-surface1 text-text-secondary"}`}>
+              <button key={m} onClick={() => setMode(m)} className={`px-3 py-1.5 font-mono text-micro uppercase tracking-[0.1em] ${mode === m ? "bg-brand text-white" : "bg-surface1 text-text-secondary"}`}>
                 {m}
               </button>
             ))}

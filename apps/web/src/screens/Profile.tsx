@@ -3,15 +3,22 @@ import { useSession } from "../state/session";
 import { api } from "../lib/api";
 import { Avatar, Card, Button } from "../components/ui";
 import { shortAddr } from "../lib/format";
+import { getTheme, setTheme, type Theme } from "../lib/theme";
 
 export function Profile() {
   const { user, logout } = useSession();
   const [scout, setScout] = useState<any>(null);
   const [showWallet, setShowWallet] = useState(false);
+  const [theme, setThemeState] = useState<Theme>(getTheme());
 
   useEffect(() => {
     api.scoutEarnings().then(setScout).catch(() => {});
   }, []);
+
+  const changeTheme = (t: Theme) => {
+    setTheme(t);
+    setThemeState(t);
+  };
 
   if (!user) return null;
   return (
@@ -46,7 +53,23 @@ export function Profile() {
           </div>
         )}
         <Row label="Notifications" value="On" />
-        <Row label="Appearance" value="Dark" />
+        <div className="flex items-center justify-between p-4 min-h-[44px]">
+          <span className="text-body">Appearance</span>
+          <div className="flex border border-border">
+            {(["light", "dark"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => changeTheme(t)}
+                aria-pressed={theme === t}
+                className={`px-3 py-1 font-mono text-micro uppercase tracking-[0.1em] ${
+                  theme === t ? "bg-brand text-white" : "bg-surface1 text-text-secondary hover:text-text"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
         <Row label="Help" value="→" />
       </Card>
 

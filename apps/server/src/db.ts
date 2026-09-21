@@ -26,6 +26,14 @@ CREATE TABLE IF NOT EXISTS users (
   createdAt INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS passkey_credentials (
+  credentialId TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES users(id),
+  publicKey TEXT,
+  createdAt INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_passkey_user ON passkey_credentials(userId);
+
 CREATE TABLE IF NOT EXISTS streams (
   id TEXT PRIMARY KEY,
   creatorId TEXT NOT NULL REFERENCES users(id),
@@ -48,6 +56,7 @@ CREATE TABLE IF NOT EXISTS reactions (
   serverTimeMs INTEGER NOT NULL,
   type TEXT NOT NULL,
   platform TEXT NOT NULL,
+  watchTimeMs INTEGER NOT NULL DEFAULT 0,
   batchId TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_reactions_stream_time ON reactions(streamId, serverTimeMs);
@@ -69,6 +78,11 @@ CREATE TABLE IF NOT EXISTS moments (
 );
 CREATE INDEX IF NOT EXISTS idx_moments_stream ON moments(streamId);
 CREATE INDEX IF NOT EXISTS idx_moments_state ON moments(state);
+
+CREATE TABLE IF NOT EXISTS moment_views (
+  momentId TEXT PRIMARY KEY REFERENCES moments(id),
+  count INTEGER NOT NULL DEFAULT 0
+);
 
 CREATE TABLE IF NOT EXISTS founding_curators (
   momentId TEXT NOT NULL REFERENCES moments(id),

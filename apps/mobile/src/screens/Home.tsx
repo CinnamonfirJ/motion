@@ -94,6 +94,16 @@ export function MomentCard({ moment, onPress }: { moment: MomentDTO; onPress: ()
         </View>
       </View>
       <View style={{ padding: 16, gap: 12 }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <View style={{ borderWidth: 1, borderColor: "rgba(140,100,255,0.4)", backgroundColor: "rgba(140,100,255,0.1)", paddingHorizontal: 8, paddingVertical: 4 }}>
+            <Text style={{ ...eyebrow(11), color: color.lime }}>🔥 Moment · {moment.metrics.category}</Text>
+          </View>
+          {moment.foundingCuratorCount > 0 ? (
+            <View style={{ borderWidth: 1, borderColor: "rgba(240,220,160,0.4)", backgroundColor: "rgba(240,220,160,0.1)", paddingHorizontal: 8, paddingVertical: 4 }}>
+              <Text style={{ ...eyebrow(11), color: color.curatorGold }}>★ {moment.foundingCuratorCount} founding</Text>
+            </View>
+          ) : null}
+        </View>
         <ReactionGraph durationSec={moment.clip.durationSec} peakOffsetSec={moment.metrics.peakOffsetSec} total={moment.metrics.totalReactions} />
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <ReactionMix mix={moment.metrics.mix} />

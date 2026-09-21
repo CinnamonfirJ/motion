@@ -1,4 +1,6 @@
 export * from "./config.js";
+export * from "./momentConfig.js";
+export * from "./momentMetrics.js";
 export * from "./types.js";
 export * from "./time.js";
 export * from "./spike.js";

@@ -4,6 +4,7 @@ import { useSession } from "../state/session";
 import { api } from "../lib/api";
 import { Avatar } from "./ui";
 import { IconHome, IconSpark, IconBolt, IconUser } from "./icons";
+import { ThemeToggle } from "./ThemeToggle";
 
 const NAV: { to: string; label: string; Icon: ComponentType<{ size?: number }>; end?: boolean }[] = [
   { to: "/", label: "Home", Icon: IconHome, end: true },
@@ -15,7 +16,7 @@ const NAV: { to: string; label: string; Icon: ComponentType<{ size?: number }>; 
 function Logo() {
   return (
     <div className="flex items-center gap-2">
-      <span className="grid h-7 w-7 place-items-center bg-lime text-ink font-bold">M</span>
+      <span className="grid h-7 w-7 place-items-center bg-brand text-white font-bold">M</span>
       <span className="text-h3 font-bold tracking-tight">Moment</span>
     </div>
   );
@@ -62,10 +63,11 @@ export function Layout() {
         ))}
         <div className="mt-auto flex items-center gap-3 border border-border bg-surface1 p-3">
           <Avatar name={user?.displayName ?? "You"} url={user?.avatarUrl} size={36} />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-bodysm text-text">{user?.displayName}</p>
             <p className="truncate font-mono text-micro text-text-muted">{balance} earned</p>
           </div>
+          <ThemeToggle />
         </div>
       </aside>
 

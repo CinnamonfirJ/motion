@@ -28,8 +28,8 @@ export function SignIn() {
     <SafeAreaView style={{ flex: 1, backgroundColor: color.night }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, justifyContent: "space-between", padding: 24 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }}>
-          <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: color.lime, alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ color: color.night, fontWeight: "700", fontSize: 18 }}>M</Text>
+          <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: color.brand, alignItems: "center", justifyContent: "center" }}>
+            <Text style={{ color: "#FFFFFF", fontWeight: "700", fontSize: 18 }}>M</Text>
           </View>
           <Text style={{ color: color.text, ...type.h2 }}>Moment</Text>
         </View>

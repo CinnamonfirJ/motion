@@ -1,24 +1,31 @@
-// Design tokens (PRODUCT-DESIGN.md §9–§15), shared across all mobile screens.
+// MOMENT design tokens (black + purple). Same 20-color palette as the web root tokens.
+// `lime` keeps its name as the accent-FILL token but is now bright purple; `brand` is the
+// primary-button purple (with white text).
 export const color = {
-  night: "#070708",
-  surface1: "#111113",
-  surface2: "#18181B",
-  surface3: "#212126",
-  border: "#2A2A30",
-  borderStrong: "#3B3B43",
-  text: "#F7F7F5",
-  textSecondary: "#B6B6BC",
-  textMuted: "#77777F",
-  textDisabled: "#525259",
-  lime: "#A7F46A",
-  electric: "#258BFF",
+  night: "#000000",
+  surface1: "#28283C",
+  surface2: "#323248",
+  surface3: "#3C3C54",
+  border: "#505064",
+  borderStrong: "#6450A0",
+  text: "#FFFFFF",
+  textSecondary: "#A0A0B4",
+  textMuted: "#78788C",
+  textDisabled: "#6E6E82",
+  brand: "#5028DC", // primary buttons (white text)
+  brandHover: "#7850C8",
+  lime: "#8C64FF", // accent fill (marks / active) — bright purple
+  tint: "#C8B4FF",
+  curatorGold: "#F0DCA0",
+  electric: "#50C8FF", // info / graph / spike line
   fire: "#FF6A3D",
   laugh: "#FFD84D",
   wow: "#4DA3FF",
-  success: "#63D88C",
+  moment: "#FF78B4",
+  success: "#8CFFC8",
   warning: "#F4C95D",
-  error: "#FF626B",
-  celebration: ["#FF7A21", "#FF3F91", "#695CFF"] as const,
+  error: "#F06464", // LIVE / error
+  celebration: ["#5028DC", "#8C64FF", "#DC78FF"] as const,
 };
 
 import { Platform } from "react-native";

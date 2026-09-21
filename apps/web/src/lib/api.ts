@@ -103,9 +103,12 @@ export interface MomentDTO {
     mix: { fire: number; laugh: number; wow: number };
     peakRate: number;
     peakOffsetSec: number;
+    category: string;
+    histogram: { second: number; fire: number; laugh: number; wow: number }[];
   };
   creator: CreatorMini | null;
   streamTitle: string;
+  views: number;
   foundingCurators: CuratorDTO[];
   foundingCuratorCount: number;
   settlement: SettlementDTO | null;
@@ -137,6 +140,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ streamId, type, clientStreamTimeMs, platform: "web", eventId }),
     }),
+  tip: (streamId: string) => req<{ ok: boolean; onchain: boolean; amountUsd: string }>(`/streams/${streamId}/tip`, { method: "POST", body: "{}" }),
+  clip: (streamId: string, clientStreamTimeMs: number) =>
+    req<{ ok: boolean; clip: { url: string; durationSec: number } }>(`/streams/${streamId}/clip`, {
+      method: "POST",
+      body: JSON.stringify({ clientStreamTimeMs }),
+    }),
+  demo: {
+    crowd: () => req<{ crowd: { id: string; displayName: string }[]; label: string }>("/demo/crowd"),
+    forceSpike: (streamId: string) => req<{ ok: boolean; reactionsSent: number }>("/demo/force-spike", { method: "POST", body: JSON.stringify({ streamId }) }),
+    fastForward: (streamId: string) => req<{ ok: boolean; settled: number }>("/demo/fast-forward", { method: "POST", body: JSON.stringify({ streamId }) }),
+    reset: (streamId: string) => req<{ ok: boolean }>("/demo/reset", { method: "POST", body: JSON.stringify({ streamId }) }),
+  },
   moments: () => req<{ moments: MomentDTO[] }>("/moments"),
   moment: (id: string) => req<{ moment: MomentDTO }>(`/moments/${id}`),
   scoutEarnings: () =>

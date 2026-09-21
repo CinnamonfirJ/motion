@@ -1,8 +1,6 @@
 import {
   DEFAULT_CONFIG,
-  evaluateSpike,
   evaluateConfirmation,
-  selectFoundingCurators,
   distributeReward,
   streamTimeMs,
   reconcileStreamTime,
@@ -11,6 +9,15 @@ import {
   formatUsd,
   newId,
   newEventId,
+  // MOMENT Step 4 logic
+  evaluateUniqueSpike,
+  scoreFoundingCurators,
+  categoryFromMix,
+  buildHistogram,
+  SPIKE_CONFIG,
+  CURATOR_SCORE_CONFIG,
+  MOMENT_SUCCESS_CONFIG,
+  ANTI_CHEAT_CONFIG,
   type MomentConfig,
   type Moment,
   type Reaction,
@@ -19,8 +26,9 @@ import {
   type User,
   type FoundingCurator,
   type MomentMetrics,
-  type SpikeSample,
   type CuratorReaction,
+  type ReactorSample,
+  type CandidateReactor,
   type Clip,
   REACTION_TYPES,
 } from "@moment/core";
@@ -28,13 +36,18 @@ import { assertTransition } from "@moment/core";
 import { Streams, Reactions, Moments, Users, Batches } from "./store.js";
 import { hub } from "./realtime.js";
 import { settleMoment } from "./settlement.js";
-import { getChain, hashFns, toBytes32 } from "./chain.js";
+import { getChain, hashFns, toBytes32, momentIdHash } from "./chain.js";
+import { noteWatch, watchMs as getWatchMs } from "./watch.js";
 import { env } from "./env.js";
 
 /** Product config. In a fuller build this could be per-stream; here it is one source of truth. */
 export const config: MomentConfig = DEFAULT_CONFIG;
 
 const CLIP_PROCESSING_MS = 1_500; // simulated clip build time (design §19 "Building your Moment…")
+
+/** Map reactions to unique-spike samples (userId + server time + accrued watch time). */
+const toReactorSamples = (rs: Reaction[]): ReactorSample[] =>
+  rs.map((r) => ({ userId: r.userId, serverTimeMs: r.serverTimeMs, watchMs: r.watchTimeMs }));
 
 // ---------- reaction ingestion ----------
 export interface IngestResult {
@@ -52,6 +65,10 @@ export function ingestReaction(user: User, input: ReactionInput): IngestResult {
   const now = Date.now();
   const streamTime = reconcileStreamTime(input.clientStreamTimeMs, stream.startedAt, now);
 
+  // Watch-time eligibility: record first-seen, then read accrued watch time (MOMENT anti-cheat).
+  noteWatch(stream.id, user.id, now);
+  const watchTimeMs = getWatchMs(stream.id, user.id, now);
+
   const reaction: Reaction & { eventId: string } = {
     id: newId("rxn"),
     eventId: input.eventId || newEventId(),
@@ -62,6 +79,7 @@ export function ingestReaction(user: User, input: ReactionInput): IngestResult {
     serverTimeMs: now,
     type: input.type,
     platform: input.platform,
+    watchTimeMs,
     batchId: null,
   };
 
@@ -88,38 +106,37 @@ export function ingestReaction(user: User, input: ReactionInput): IngestResult {
 }
 
 function broadcastActivity(streamId: string, now: number) {
-  const recent = Reactions.inWindow(streamId, now - config.spike.recentWindowMs, now);
-  const ratePerSec = recent.length / (config.spike.recentWindowMs / 1000);
+  const recentMs = SPIKE_CONFIG.recentWindowSeconds * 1000;
+  const recent = Reactions.inWindow(streamId, now - recentMs, now);
+  const ratePerSec = recent.length / SPIKE_CONFIG.recentWindowSeconds;
   const recentByType = { fire: 0, laugh: 0, wow: 0 } as Record<ReactionType, number>;
   for (const r of recent) recentByType[r.type]++;
 
-  // "Heating up": rising but not yet a Moment (design §7.4/§7.7). Never expose numbers.
-  const evalr = evaluateSpike(toSamples(Reactions.inWindow(streamId, now - config.spike.baselineWindowMs, now)), {
+  // "Heating up": unique eligible reactors rising toward the spike threshold (never expose numbers).
+  const baselineMs = SPIKE_CONFIG.baselineWindowSeconds * 1000;
+  const evalr = evaluateUniqueSpike(toReactorSamples(Reactions.inWindow(streamId, now - baselineMs, now)), {
     now,
-    streamStartedAt: Streams.byId(streamId)?.startedAt ?? now,
     cooldownUntil: Moments.cooldownUntil(streamId),
-  }, config.spike);
-  const heatingUp = !evalr.isCandidate && evalr.ratio >= config.spike.spikeMultiplier * 0.55 && recent.length >= 3;
+  });
+  const heatingUp = !evalr.isSpike && evalr.uniqueRecent >= Math.max(2, Math.ceil(evalr.threshold * 0.6));
 
   hub.broadcastStream(streamId, { t: "activity", streamId, ratePerSec, recentByType, heatingUp });
 }
 
-const toSamples = (rs: Reaction[]): SpikeSample[] => rs.map((r) => ({ serverTimeMs: r.serverTimeMs, userId: r.userId }));
-
-// ---------- detection ----------
+// ---------- detection (MOMENT unique-reactor spike) ----------
 function detect(streamId: string, now: number) {
   const stream = Streams.byId(streamId);
   if (!stream || !stream.isLive) return;
-  // One active candidate per stream at a time (PRD §35 overlapping Moments -> cooldown/merge).
+  // One active candidate per stream at a time (overlapping Moments -> cooldown/merge).
   if (Moments.activeForStream(streamId).length > 0) return;
 
-  const history = Reactions.inWindow(streamId, now - config.spike.baselineWindowMs, now);
-  const evalr = evaluateSpike(toSamples(history), {
+  const baselineMs = SPIKE_CONFIG.baselineWindowSeconds * 1000;
+  const history = Reactions.inWindow(streamId, now - baselineMs, now);
+  const evalr = evaluateUniqueSpike(toReactorSamples(history), {
     now,
-    streamStartedAt: stream.startedAt,
     cooldownUntil: Moments.cooldownUntil(streamId),
-  }, config.spike);
-  if (!evalr.isCandidate) return;
+  });
+  if (!evalr.isSpike) return;
 
   const spikeStreamTime = streamTimeMs(stream.startedAt, now);
   const moment: Moment = {
@@ -137,7 +154,7 @@ function detect(streamId: string, now: number) {
     createdAt: now,
     updatedAt: now,
   };
-  const cooldownUntil = now + config.spike.cooldownMs;
+  const cooldownUntil = now + SPIKE_CONFIG.cooldownSeconds * 1000;
   Moments.insert(moment, cooldownUntil);
 
   // CANDIDATE -> DETECTING immediately: the UI shows "Moment detected" (design §7.8).
@@ -148,7 +165,10 @@ function detect(streamId: string, now: number) {
     momentId: moment.id,
     spikeStreamTimeMs: spikeStreamTime,
   });
-  console.log(`[moment] detected ${moment.id} on ${streamId} @${spikeStreamTime}ms (ratio ${evalr.ratio.toFixed(2)})`);
+  console.log(
+    `[moment] detected ${moment.id} on ${streamId} @${spikeStreamTime}ms ` +
+      `(uniqueRecent ${evalr.uniqueRecent} >= threshold ${evalr.threshold})`
+  );
 }
 
 // ---------- lifecycle tick ----------
@@ -185,15 +205,65 @@ async function advance(moment: Moment, now: number) {
       if (moment.clip.ready || now - (moment.confirmedAt ?? now) >= CLIP_PROCESSING_MS) finishClipping(moment);
       return;
     case "SETTLING":
-      await runSettlement(moment, now);
+      // Publish the card immediately as "reward pending"; payout waits on the success threshold.
+      publishMoment(moment);
       return;
     case "PUBLISHED":
-      // Retry settlement idempotently until confirmed (PRD §35 settlement fails).
-      if (!moment.settlement || moment.settlement.status !== "confirmed") {
-        await runSettlement(moment, now);
+      // Settle once the Moment reaches its success threshold (DEMO: ~10s after confirmation).
+      if ((!moment.settlement || moment.settlement.status !== "confirmed") && successMet(moment, now)) {
+        await settleAndFinalize(moment, now);
       }
       return;
   }
+}
+
+/** MOMENT_SUCCESS_CONFIG gate: settle once the Moment reaches its success threshold (real
+ *  views), OR — as a demo guarantee so the loop always completes — ~10s after confirmation. */
+function successMet(moment: Moment, now: number): boolean {
+  if (moment.confirmedAt == null) return false;
+  const views = Moments.viewsFor(moment.id);
+  if (views >= MOMENT_SUCCESS_CONFIG.minimumViews) return true;
+  return now - moment.confirmedAt >= MOMENT_SUCCESS_CONFIG.demoSettleAfterMs;
+}
+
+function publishMoment(moment: Moment) {
+  transition(moment, "PUBLISHED");
+  hub.broadcastStream(moment.streamId, { t: "moment", streamId: moment.streamId, momentId: moment.id, state: "PUBLISHED" });
+  hub.broadcastStream(moment.streamId, {
+    t: "settlement",
+    momentId: moment.id,
+    status: moment.settlement?.status ?? "pending",
+    txHash: moment.settlement?.txHash ?? null,
+  });
+}
+
+/** Tip a stream — funds the reward pool. Real Tipped event on-chain when configured. */
+export async function tipStream(streamId: string, amountWei: bigint): Promise<{ ok: boolean; onchain: boolean; txHash: string | null }> {
+  const chain = getChain();
+  if (!chain.enabled || !chain.contract) return { ok: true, onchain: false, txHash: null };
+  try {
+    const tx = await (chain.contract as any).tip(toBytes32(streamId), { value: amountWei });
+    await tx.wait(1);
+    return { ok: true, onchain: true, txHash: tx.hash };
+  } catch (e) {
+    console.error("tip failed", e);
+    return { ok: false, onchain: true, txHash: null };
+  }
+}
+
+/** Demo fast-forward: settle any published-but-pending Moments on a stream right now,
+ *  by driving the REAL settlement path (never fakes the transaction). */
+export async function demoFastForwardSettlement(streamId: string): Promise<number> {
+  const now = Date.now();
+  let n = 0;
+  for (const m of Moments.publicFeed(50)) {
+    if (m.streamId !== streamId) continue;
+    if (m.state === "PUBLISHED" && (!m.settlement || m.settlement.status !== "confirmed")) {
+      await settleAndFinalize(m, now);
+      n++;
+    }
+  }
+  return n;
 }
 
 // ---------- confirmation + curators ----------
@@ -221,10 +291,29 @@ function resolveConfirmation(moment: Moment, now: number) {
     return;
   }
 
-  // Freeze Founding Curators deterministically (PRD §17 immutable after confirmation).
-  const selected = selectFoundingCurators(curatorReactions, deadline, config.curator);
+  // Freeze Founding Curators via WEIGHTED scoring (timing/watch/reputation/anti-bot) over
+  // eligible, deduplicated users — reward legitimate early discovery, not spam clicking.
+  const minWatchMs = ANTI_CHEAT_CONFIG.minimumWatchSeconds * 1000;
+  const byUser = new Map<string, CandidateReactor>();
+  for (const r of reactions) {
+    if (r.watchTimeMs < minWatchMs) continue; // eligibility
+    const cur = byUser.get(r.userId);
+    if (!cur || r.serverTimeMs < cur.firstServerTimeMs) {
+      byUser.set(r.userId, {
+        userId: r.userId,
+        walletAddress: r.walletAddress,
+        firstServerTimeMs: r.serverTimeMs,
+        firstStreamTimeMs: r.streamTimeMs,
+        watchMs: r.watchTimeMs,
+        reputation: Moments.reputationFor(r.userId),
+        antiBotScore: 1, // MVP stub: 1 = clean (device/IP clustering is flag-only)
+      });
+    }
+  }
+  const windowStart = moment.detectedAt - SPIKE_CONFIG.recentWindowSeconds * 1000;
+  const selected = scoreFoundingCurators([...byUser.values()], windowStart, deadline, CURATOR_SCORE_CONFIG);
 
-  // Compute reward split now so the celebration can show the amount immediately ("Settling").
+  // Compute reward split now so the celebration can show the amount immediately ("pending").
   const dist = distributeReward(config.reward.defaultPoolUnits, selected.length, config.reward, config.curator);
   const curators: FoundingCurator[] = selected.map((c, i) => ({
     momentId: moment.id,
@@ -267,9 +356,36 @@ function resolveConfirmation(moment: Moment, now: number) {
     });
   }
 
-  // Commit reaction provenance for this Moment as a batch (PRD §20/§21).
+  // Record the Moment + its Founding Curators on-chain immediately (createMoment / MomentCreated),
+  // then commit reaction provenance as a batch.
+  void createMomentOnChain(moment, curators);
   void commitBatch(moment, reactions, deadline);
-  console.log(`[moment] confirmed ${moment.id} with ${curators.length} founding curators`);
+  console.log(`[moment] confirmed ${moment.id} (${moment.metrics.category}) with ${curators.length} founding curators`);
+}
+
+/** Records the Moment + Founding Curators on-chain (createMoment → MomentCreated). */
+const CATEGORY_CODE: Record<string, number> = { Funny: 0, Hype: 1, Wow: 2 };
+async function createMomentOnChain(moment: Moment, curators: FoundingCurator[]) {
+  const chain = getChain();
+  if (!chain.enabled || !chain.contract) return; // simulation: nothing to record on-chain
+  try {
+    const contract = chain.contract as any;
+    const creator = Users.byId(moment.creatorId);
+    if (await contract.momentCreated(momentIdHash(moment.id))) return; // idempotent
+    const tx = await contract.createMoment(
+      momentIdHash(moment.id),
+      toBytes32(moment.streamId),
+      creator?.walletAddress ?? curators[0]?.walletAddress ?? "",
+      Math.floor(moment.clip.startStreamTimeMs / 1000),
+      Math.floor(moment.clip.endStreamTimeMs / 1000),
+      CATEGORY_CODE[moment.metrics.category] ?? 1,
+      curators.map((c) => c.walletAddress)
+    );
+    await tx.wait(1);
+    console.log(`[moment] createMoment on-chain ${moment.id} tx=${tx.hash}`);
+  } catch (e) {
+    console.error("createMoment on-chain failed", e);
+  }
 }
 
 // ---------- clipping ----------
@@ -320,27 +436,15 @@ function buildClip(moment: Moment, startedAt: number, durationSec: number, video
   };
 }
 
-// ---------- settlement ----------
-async function runSettlement(moment: Moment, now: number) {
-  // Ensure we are in a settleable state.
-  if (moment.state === "SETTLING") {
-    // Publish the card immediately; the reward settles behind it (PRD §11 note).
-    // First move to PUBLISHED so the feed shows it while settling.
-  }
+// ---------- settlement (real Monad tx or idempotent simulation) ----------
+async function settleAndFinalize(moment: Moment, _now: number) {
   const creator = Users.byId(moment.creatorId);
   const creatorWallet = creator?.walletAddress ?? moment.foundingCurators[0]?.walletAddress ?? "";
 
   const outcome = await settleMoment(moment, config, creatorWallet);
   moment.settlement = outcome.settlement;
-
-  // Persist per-curator reward units.
   Moments.setCurators(moment.id, outcome.curators);
   moment.foundingCurators = outcome.curators;
-
-  if (moment.state === "SETTLING") {
-    transition(moment, "PUBLISHED");
-    hub.broadcastStream(moment.streamId, { t: "moment", streamId: moment.streamId, momentId: moment.id, state: "PUBLISHED" });
-  }
   Moments.update(moment);
 
   hub.broadcastStream(moment.streamId, {
@@ -446,17 +550,33 @@ function computeMetrics(reactions: Reaction[], spikeStreamTimeMs: number): Momen
       peakOffsetSec = sec;
     }
   }
+  const durationSec = config.clip.preRollSec + config.clip.postRollSec;
+  const histogram = buildHistogram(
+    reactions.map((r) => ({ streamTimeMs: r.streamTimeMs, type: r.type })),
+    clipStart,
+    durationSec
+  );
   return {
     totalReactions: reactions.length,
     uniqueReactors: users.size,
     mix,
     peakRate,
     peakOffsetSec,
+    category: categoryFromMix(mix),
+    histogram,
   };
 }
 
 function emptyMetrics(): MomentMetrics {
-  return { totalReactions: 0, uniqueReactors: 0, mix: { fire: 0, laugh: 0, wow: 0 }, peakRate: 0, peakOffsetSec: 15 };
+  return {
+    totalReactions: 0,
+    uniqueReactors: 0,
+    mix: { fire: 0, laugh: 0, wow: 0 },
+    peakRate: 0,
+    peakOffsetSec: 15,
+    category: "Hype",
+    histogram: [],
+  };
 }
 function emptyClip(spikeStreamTimeMs: number): Clip {
   return {

@@ -42,6 +42,8 @@ export const env = {
   MONAD_RPC_URL: process.env.MONAD_RPC_URL ?? "",
   MOMENT_REWARDS_ADDRESS: process.env.MOMENT_REWARDS_ADDRESS ?? "",
   SETTLER_PRIVATE_KEY: process.env.SETTLER_PRIVATE_KEY ?? "",
+  /** Platform recipient of the 10% cut. Defaults to the settler address when unset. */
+  PLATFORM_ADDRESS: process.env.PLATFORM_ADDRESS ?? "",
   MONAD_EXPLORER_TX: process.env.MONAD_EXPLORER_TX ?? "https://testnet.monadexplorer.com/tx/",
 
   /**
@@ -53,6 +55,13 @@ export const env = {
 
   /** Seed demo streams + bot participants that drive reliable spikes for the demo. */
   ENABLE_SEED: (process.env.ENABLE_SEED ?? "true") === "true",
+
+  /** Passkey (WebAuthn) relying party. RP_ID must be a registrable domain of the web origin
+   *  (use "localhost" for local dev — passkeys don't work over a raw LAN IP). */
+  RP_ID: process.env.RP_ID ?? "localhost",
+  RP_NAME: process.env.RP_NAME ?? "Moment",
+  /** Comma-separated allowed web origins; empty => allow localhost origins in dev. */
+  RP_ORIGINS: (process.env.RP_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
 };
 
 /** True when a real Monad settlement path is fully configured. */

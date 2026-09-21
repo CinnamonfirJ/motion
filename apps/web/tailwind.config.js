@@ -5,8 +5,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Neutrals + the text-accent (`leaf`) are themed via CSS variables (light default,
-        // dark under [data-theme="dark"]). The video theater / Live screen opt into dark.
+        // Neutrals + accent text (`leaf`) come from CSS variables (MOMENT black+purple).
         night: "var(--c-night)",
         surface1: "var(--c-surface1)",
         surface2: "var(--c-surface2)",
@@ -19,19 +18,27 @@ export default {
           muted: "var(--c-text-muted)",
           disabled: "var(--c-text-disabled)",
         },
-        // Fixed across themes: bright lime is a FILL (with `ink` text); `leaf` is accent TEXT.
-        lime: "#A7F46A",
-        leaf: "var(--c-leaf)",
-        ink: "#14150D",
-        electric: "#258BFF",
+        // MOMENT brand purple. These accents are theme-independent (fixed hex) so Tailwind's
+        // /opacity modifiers (bg-lime/10, border-error/40, …) render correctly.
+        brand: "#5028DC", // --color-9 — primary buttons (white text)
+        brandHover: "#7850C8", // --color-13
+        brandPressed: "#6450A0", // --color-10
+        lime: "#8C64FF", // --color-11 — accent fill (marks, active bars)
+        leaf: "var(--c-leaf)", // accent TEXT (links/active) — themed (deep purple on light, bright on dark)
+        ink: "#14150D", // dark text on bright fills (badges/avatars)
+        tint: "#C8B4FF", // --color-12 — badge / tint backgrounds
+        curatorGold: "#F0DCA0", // --color-19 — Founding Curator badge
+        electric: "#50C8FF", // --color-4 — info / graph / spike line
         fire: "#FF6A3D",
         laugh: "#FFD84D",
         wow: "#4DA3FF",
-        success: "#63D88C",
+        moment: "#FF78B4", // --color-17 — Moment / reaction highlight
+        momentTint: "#FFB4DC", // --color-16
+        success: "#8CFFC8", // --color-3
         warning: "#F4C95D",
-        error: "#FF626B",
-        info: "#5A9FFF",
-        celebration: { start: "#FF7A21", mid: "#FF3F91", end: "#695CFF" },
+        error: "#F06464", // --color-18 — LIVE / error
+        info: "#50C8FF",
+        celebration: { start: "#5028DC", mid: "#8C64FF", end: "#DC78FF" },
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
@@ -73,8 +80,8 @@ export default {
       },
       boxShadow: {
         modal: "0 16px 48px rgba(0,0,0,0.45)",
-        glow: "0 0 0 1px rgba(167,244,106,0.25), 0 0 32px rgba(167,244,106,0.18)",
-        glowBlue: "0 0 0 1px rgba(37,139,255,0.3), 0 0 28px rgba(37,139,255,0.22)",
+        glow: "0 0 0 1px rgba(140,100,255,0.25), 0 0 32px rgba(140,100,255,0.18)",
+        glowBlue: "0 0 0 1px rgba(80,200,255,0.3), 0 0 28px rgba(80,200,255,0.22)",
       },
       transitionDuration: {
         quick: "120ms",

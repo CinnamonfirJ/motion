@@ -28,8 +28,9 @@ export function Button({
   disabled?: boolean;
   right?: ReactNode;
 }) {
-  const bg = variant === "primary" ? color.lime : "transparent";
-  const fg = variant === "primary" ? color.night : color.text;
+  // MOMENT primary: brand purple with white text (accessible on the bright brand).
+  const bg = variant === "primary" ? color.brand : "transparent";
+  const fg = variant === "primary" ? "#FFFFFF" : color.text;
   return (
     <Pressable
       onPress={onPress}
@@ -88,7 +89,7 @@ export function Pill({ children, tone = "neutral" }: { children: ReactNode; tone
   const map = {
     neutral: { bg: color.surface1, fg: color.textSecondary, bd: color.border },
     live: { bg: "rgba(255,98,107,0.10)", fg: color.error, bd: "rgba(255,98,107,0.4)" },
-    lime: { bg: "rgba(167,244,106,0.10)", fg: color.lime, bd: "rgba(167,244,106,0.4)" },
+    lime: { bg: "rgba(140,100,255,0.10)", fg: color.lime, bd: "rgba(140,100,255,0.4)" },
   }[tone];
   return (
     <View style={{ borderWidth: 1, borderColor: map.bd, backgroundColor: map.bg, paddingHorizontal: 8, paddingVertical: 4, flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -134,12 +135,12 @@ export function ReactionGraph({ durationSec, peakOffsetSec, total, live }: { dur
   });
   const max = Math.max(...bars);
   const peakIdx = Math.round((Math.min(dur, peakOffsetSec) / dur) * (N - 1));
-  const accent = live ? color.electric : color.lime;
+  const accent = color.electric; // MOMENT: graphs / spike line use --color-4
   return (
     <View accessible accessibilityLabel={`Reaction activity peaked ${Math.round(peakOffsetSec)} seconds in, from ${total} reactions.`}>
       <View style={{ flexDirection: "row", alignItems: "flex-end", height: 72, gap: 3 }}>
         {bars.map((b, i) => (
-          <View key={i} style={{ flex: 1, height: `${(b / max) * 100}%`, backgroundColor: i === peakIdx ? accent : i > N * 0.5 ? "rgba(167,244,106,0.55)" : color.surface3 }} />
+          <View key={i} style={{ flex: 1, height: `${(b / max) * 100}%`, backgroundColor: i === peakIdx ? accent : i > N * 0.5 ? "rgba(80,200,255,0.45)" : color.surface3 }} />
         ))}
       </View>
     </View>

@@ -119,8 +119,8 @@ export function MomentDetail() {
       ) : null}
 
       {moment.isLiveStream ? (
-        <Pressable onPress={() => nav.navigate("Live", { id: moment.streamId })} style={{ backgroundColor: color.lime, minHeight: 48, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ color: color.night, ...eyebrow(12) }}>Join live</Text>
+        <Pressable onPress={() => nav.navigate("Live", { id: moment.streamId })} style={{ backgroundColor: color.brand, minHeight: 48, alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ color: "#FFFFFF", ...eyebrow(12) }}>Join live</Text>
         </Pressable>
       ) : null}
     </ScrollView>

@@ -56,6 +56,16 @@ export function MomentCard({ moment }: { moment: MomentDTO }) {
       </div>
 
       <div className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="inline-flex items-center gap-1.5 border border-lime/40 bg-lime/10 px-2 py-1 font-mono text-micro uppercase tracking-[0.12em] text-leaf">
+            🔥 Moment · {moment.metrics.category}
+          </span>
+          {moment.foundingCuratorCount > 0 && (
+            <span className="inline-flex items-center gap-1 border border-curatorGold/40 bg-curatorGold/10 px-2 py-1 font-mono text-micro uppercase tracking-[0.1em] text-curatorGold">
+              ★ {moment.foundingCuratorCount} founding
+            </span>
+          )}
+        </div>
         <ReactionGraph
           durationSec={moment.clip.durationSec}
           peakOffsetSec={moment.metrics.peakOffsetSec}

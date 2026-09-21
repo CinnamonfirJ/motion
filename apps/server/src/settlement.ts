@@ -6,6 +6,7 @@ import {
   type FoundingCurator,
 } from "@moment/core";
 import { getChain, momentIdHash } from "./chain.js";
+import { env } from "./env.js";
 import { ethers } from "ethers";
 
 export interface SettlementOutcome {
@@ -80,10 +81,13 @@ export async function settleMoment(
       };
     }
 
+    const platformAddress = env.PLATFORM_ADDRESS || (await (chain.contract as any).runner?.getAddress?.()) || creatorWalletAddress;
     const tx = await contract.settleMoment(
       idHash,
       creatorWalletAddress,
       dist.creatorUnits,
+      platformAddress,
+      dist.platformUnits,
       curatorAddresses,
       curatorAmounts
     );

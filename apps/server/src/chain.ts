@@ -20,8 +20,11 @@ export const toBytes32 = (s: string): string => ethers.keccak256(ethers.toUtf8By
 
 const MINIMAL_ABI = [
   "function commitReactionBatch(bytes32 batchId, bytes32 streamId, uint256 reactionCount, uint64 fromTs, uint64 toTs, bytes32 commitment)",
-  "function settleMoment(bytes32 momentId, address creator, uint256 creatorAmount, address[] curators, uint256[] curatorAmounts)",
+  "function tip(bytes32 streamId) payable",
+  "function createMoment(bytes32 momentId, bytes32 streamId, address creator, uint64 clipStart, uint64 clipEnd, uint8 category, address[] curators)",
+  "function settleMoment(bytes32 momentId, address creator, uint256 creatorAmount, address platform, uint256 platformAmount, address[] curators, uint256[] curatorAmounts)",
   "function isMomentSettled(bytes32 momentId) view returns (bool)",
+  "function momentCreated(bytes32) view returns (bool)",
   "function poolBalance() view returns (uint256)",
   "function batchCommitted(bytes32) view returns (bool)",
 ];
