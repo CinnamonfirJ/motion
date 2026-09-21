@@ -5,19 +5,24 @@ export default {
   theme: {
     extend: {
       colors: {
-        night: "#070708",
-        surface1: "#111113",
-        surface2: "#18181B",
-        surface3: "#212126",
-        border: "#2A2A30",
-        borderStrong: "#3B3B43",
+        // Neutrals + the text-accent (`leaf`) are themed via CSS variables (light default,
+        // dark under [data-theme="dark"]). The video theater / Live screen opt into dark.
+        night: "var(--c-night)",
+        surface1: "var(--c-surface1)",
+        surface2: "var(--c-surface2)",
+        surface3: "var(--c-surface3)",
+        border: "var(--c-border)",
+        borderStrong: "var(--c-border-strong)",
         text: {
-          DEFAULT: "#F7F7F5",
-          secondary: "#B6B6BC",
-          muted: "#77777F",
-          disabled: "#525259",
+          DEFAULT: "var(--c-text)",
+          secondary: "var(--c-text-secondary)",
+          muted: "var(--c-text-muted)",
+          disabled: "var(--c-text-disabled)",
         },
+        // Fixed across themes: bright lime is a FILL (with `ink` text); `leaf` is accent TEXT.
         lime: "#A7F46A",
+        leaf: "var(--c-leaf)",
+        ink: "#14150D",
         electric: "#258BFF",
         fire: "#FF6A3D",
         laugh: "#FFD84D",

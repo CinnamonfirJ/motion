@@ -15,7 +15,7 @@ const NAV: { to: string; label: string; Icon: ComponentType<{ size?: number }>; 
 function Logo() {
   return (
     <div className="flex items-center gap-2">
-      <span className="grid h-7 w-7 place-items-center bg-lime text-night font-bold">M</span>
+      <span className="grid h-7 w-7 place-items-center bg-lime text-ink font-bold">M</span>
       <span className="text-h3 font-bold tracking-tight">Moment</span>
     </div>
   );
@@ -47,7 +47,7 @@ export function Layout() {
             end={n.end}
             className={({ isActive }) =>
               `relative flex items-center gap-3 px-3 py-2.5 font-mono text-label uppercase tracking-[0.1em] transition-colors duration-quick ${
-                isActive ? "bg-surface2 text-lime" : "text-text-secondary hover:bg-surface1 hover:text-text"
+                isActive ? "bg-surface2 text-leaf" : "text-text-secondary hover:bg-surface1 hover:text-text"
               }`
             }
           >
@@ -75,7 +75,7 @@ export function Layout() {
         style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }}
       >
         <Logo />
-        <span className="border border-border bg-surface1 px-2.5 py-1 font-mono text-micro uppercase tracking-[0.1em] text-lime">
+        <span className="border border-border bg-surface1 px-2.5 py-1 font-mono text-micro uppercase tracking-[0.1em] text-leaf">
           {balance || "$0.00"} earned
         </span>
       </header>
@@ -98,7 +98,7 @@ export function Layout() {
             end={n.end}
             className={({ isActive }) =>
               `flex flex-col items-center gap-1 py-2.5 font-mono text-micro uppercase tracking-[0.08em] ${
-                isActive ? "text-lime" : "text-text-muted"
+                isActive ? "text-leaf" : "text-text-muted"
               }`
             }
           >

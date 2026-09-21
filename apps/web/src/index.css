@@ -2,8 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light is the default (marketing site + browsing), matching the reference. The video
+   theater (Live) and video overlays opt into dark via [data-theme="dark"]. */
 :root {
+  color-scheme: light;
+  --c-night: #eceee6; /* page background (warm off-white) */
+  --c-surface1: #ffffff;
+  --c-surface2: #f4f5ee;
+  --c-surface3: #e7e8de;
+  --c-border: #d8dacd;
+  --c-border-strong: #bfc1b1;
+  --c-text: #15160e;
+  --c-text-secondary: #525446;
+  --c-text-muted: #7f8173;
+  --c-text-disabled: #a9ab9c;
+  --c-leaf: #2f6a12; /* accent TEXT on light (green, readable) */
+  --scaffold-line: rgba(47, 106, 18, 0.12);
+  --scaffold-dot: rgba(47, 106, 18, 0.14);
+  --skel-a: #eceee6;
+  --skel-b: #f6f7f1;
+}
+
+[data-theme="dark"] {
   color-scheme: dark;
+  --c-night: #070708;
+  --c-surface1: #111113;
+  --c-surface2: #18181b;
+  --c-surface3: #212126;
+  --c-border: #2a2a30;
+  --c-border-strong: #3b3b43;
+  --c-text: #f7f7f5;
+  --c-text-secondary: #b6b6bc;
+  --c-text-muted: #77777f;
+  --c-text-disabled: #525259;
+  --c-leaf: #a7f46a; /* accent text goes bright on dark */
+  --scaffold-line: rgba(167, 244, 106, 0.06);
+  --scaffold-dot: rgba(167, 244, 106, 0.1);
+  --skel-a: #18181b;
+  --skel-b: #212126;
 }
 
 html,
@@ -14,16 +50,16 @@ body,
 
 body {
   margin: 0;
-  background: #070708;
-  color: #f7f7f5;
+  background: var(--c-night);
+  color: var(--c-text);
   font-family: Inter, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
 }
 
-/* Visible keyboard focus on dark surfaces (design §28). */
+/* Visible keyboard focus (design §28). */
 :focus-visible {
-  outline: 2px solid #a7f46a;
+  outline: 2px solid var(--c-leaf);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -48,15 +84,15 @@ body {
 .hatch {
   background-image: repeating-linear-gradient(
     -45deg,
-    rgba(167, 244, 106, 0.06) 0,
-    rgba(167, 244, 106, 0.06) 1px,
+    var(--scaffold-line) 0,
+    var(--scaffold-line) 1px,
     transparent 1px,
     transparent 7px
   );
 }
 /* Dotted grid texture for hero / mockup bands. */
 .dotgrid {
-  background-image: radial-gradient(rgba(167, 244, 106, 0.1) 1px, transparent 1px);
+  background-image: radial-gradient(var(--scaffold-dot) 1px, transparent 1px);
   background-size: 22px 22px;
 }
 /* Mono uppercase label helper. */
@@ -70,8 +106,8 @@ body {
   position: absolute;
   width: 11px;
   height: 11px;
-  color: #a7f46a;
-  opacity: 0.7;
+  color: var(--c-leaf);
+  opacity: 0.8;
   pointer-events: none;
 }
 .plusmark::before,
@@ -95,7 +131,7 @@ body {
   transform: translateY(-50%);
 }
 .skeleton {
-  background: linear-gradient(90deg, #18181b 0px, #212126 200px, #18181b 400px);
+  background: linear-gradient(90deg, var(--skel-a) 0px, var(--skel-b) 200px, var(--skel-a) 400px);
   background-size: 800px 100%;
 }
 .no-scrollbar::-webkit-scrollbar {

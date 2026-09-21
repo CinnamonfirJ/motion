@@ -10,7 +10,7 @@ function StreamCard({ s }: { s: StreamDTO }) {
     <Link to={`/live/${s.id}`} className="block w-[260px] shrink-0 border border-border bg-surface1 overflow-hidden hover:border-borderStrong transition-colors">
       <div className="relative aspect-video bg-black">
         {s.thumbnailUrl && <img src={s.thumbnailUrl} alt="" className="h-full w-full object-cover opacity-90" />}
-        <div className="absolute top-2 left-2 right-2 flex justify-between">
+        <div data-theme="dark" className="absolute top-2 left-2 right-2 flex justify-between">
           <LivePill count={s.viewerCount} />
           {s.viewerCount > 2 && <Pill tone="lime">Heating up</Pill>}
         </div>

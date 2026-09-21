@@ -46,12 +46,12 @@ export function MomentCard({ moment }: { moment: MomentDTO }) {
         <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
           <span className="inline-flex items-center gap-2 rounded-full bg-black/45 backdrop-blur px-2.5 py-1">
             <Avatar name={moment.creator?.displayName ?? "Creator"} url={moment.creator?.avatarUrl} size={22} />
-            <span className="text-label text-text">{moment.creator?.displayName}</span>
+            <span className="text-label text-white">{moment.creator?.displayName}</span>
           </span>
           {moment.isLiveStream && <LivePill />}
         </div>
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
-          <p className="text-body font-semibold text-text line-clamp-1">{moment.streamTitle}</p>
+          <p className="text-body font-semibold text-white line-clamp-1">{moment.streamTitle}</p>
         </div>
       </div>
 
@@ -73,7 +73,7 @@ export function MomentCard({ moment }: { moment: MomentDTO }) {
             <span>{moment.foundingCuratorCount} founding</span>
           </div>
           {moment.isLiveStream ? (
-            <span className="font-mono text-label uppercase tracking-[0.1em] text-lime">Join live →</span>
+            <span className="font-mono text-label uppercase tracking-[0.1em] text-leaf">Join live →</span>
           ) : (
             <Pill>Moment</Pill>
           )}

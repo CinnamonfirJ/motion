@@ -18,7 +18,7 @@ export function Button({
   const base =
     "group relative inline-flex items-center justify-center gap-2 min-h-[46px] px-5 font-mono text-label uppercase tracking-[0.14em] transition-all duration-quick disabled:opacity-40 disabled:pointer-events-none";
   const styles = {
-    primary: "bg-lime text-night hover:brightness-105 active:translate-y-px",
+    primary: "bg-lime text-ink hover:brightness-105 active:translate-y-px",
     secondary: "bg-transparent text-text hover:bg-surface2 active:translate-y-px",
     ghost: "bg-transparent text-text-secondary hover:text-text",
   }[variant];
@@ -61,7 +61,7 @@ export function Pill({
   const tones = {
     neutral: "border-border bg-surface1 text-text-secondary",
     live: "border-error/40 bg-error/10 text-error",
-    lime: "border-lime/40 bg-lime/10 text-lime",
+    lime: "border-lime/40 bg-lime/10 text-leaf",
     warning: "border-warning/40 bg-warning/10 text-warning",
   }[tone];
   // Square bordered chip (no pills) + mono label — the reference's tag style.
@@ -89,7 +89,7 @@ export function Avatar({ name, url, size = 40 }: { name: string; url?: string | 
     <img src={url} alt={name} width={size} height={size} className="rounded-full object-cover" style={{ width: size, height: size }} />
   ) : (
     <div
-      className="flex items-center justify-center rounded-full font-semibold text-night"
+      className="flex items-center justify-center rounded-full font-semibold text-ink"
       style={{ width: size, height: size, background: `hsl(${h} 70% 65%)`, fontSize: size * 0.36 }}
       aria-hidden
     >
@@ -135,7 +135,7 @@ export function StatusRow({ status }: { status: string }) {
 export function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 border border-dashed border-border py-16 text-center">
-      <div className="grid h-11 w-11 place-items-center border border-border bg-surface1 text-lime">
+      <div className="grid h-11 w-11 place-items-center border border-border bg-surface1 text-leaf">
         <span className="h-2 w-2 bg-lime" aria-hidden />
       </div>
       <h3 className="text-h3 text-text">{title}</h3>

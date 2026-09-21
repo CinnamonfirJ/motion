@@ -64,19 +64,19 @@ export function ReactionGraph({
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label={summary} preserveAspectRatio="none">
         <defs>
           <linearGradient id={`fill-${gid}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={live ? "#258BFF" : "#A7F46A"} stopOpacity="0.28" />
-            <stop offset="100%" stopColor={live ? "#258BFF" : "#A7F46A"} stopOpacity="0" />
+            <stop offset="0%" stopColor={live ? "#258BFF" : "var(--c-leaf)"} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={live ? "#258BFF" : "var(--c-leaf)"} stopOpacity="0" />
           </linearGradient>
           <linearGradient id={`line-${gid}`} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="#77777F" />
-            <stop offset="55%" stopColor={live ? "#4DA3FF" : "#A7F46A"} />
-            <stop offset="100%" stopColor={live ? "#258BFF" : "#A7F46A"} />
+            <stop offset="55%" stopColor={live ? "#4DA3FF" : "var(--c-leaf)"} />
+            <stop offset="100%" stopColor={live ? "#258BFF" : "var(--c-leaf)"} />
           </linearGradient>
         </defs>
         <path d={areaPath} fill={`url(#fill-${gid})`} />
         <path d={linePath} fill="none" stroke={`url(#line-${gid})`} strokeWidth={2.5} strokeLinecap="round" />
-        <circle cx={peakX} cy={peakY} r={4.5} fill={live ? "#4DA3FF" : "#A7F46A"} />
-        <circle cx={peakX} cy={peakY} r={9} fill="none" stroke={live ? "#4DA3FF" : "#A7F46A"} strokeOpacity="0.4" />
+        <circle cx={peakX} cy={peakY} r={4.5} fill={live ? "#4DA3FF" : "var(--c-leaf)"} />
+        <circle cx={peakX} cy={peakY} r={9} fill="none" stroke={live ? "#4DA3FF" : "var(--c-leaf)"} strokeOpacity="0.4" />
       </svg>
       <figcaption className="sr-only">{summary}</figcaption>
     </figure>

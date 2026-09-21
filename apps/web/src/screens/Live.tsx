@@ -101,7 +101,7 @@ export function Live() {
 
   if (!stream) {
     return (
-      <div className="min-h-screen grid place-items-center bg-night">
+      <div data-theme="dark" className="min-h-screen grid place-items-center bg-night text-text">
         <div className="text-center">
           <div className="mx-auto mb-3 h-8 w-8 rounded-full border-2 border-lime border-t-transparent animate-spin" />
           <p className="text-body text-text-secondary">Joining live…</p>
@@ -111,7 +111,7 @@ export function Live() {
   }
 
   return (
-    <div className="min-h-screen bg-night flex flex-col">
+    <div data-theme="dark" className="min-h-screen bg-night text-text flex flex-col">
       {/* video region (~65-72% on mobile) */}
       <div className="relative w-full bg-black" style={{ height: "min(72vh, 720px)" }}>
         <LivePlayer src={stream.videoUrl} getPositionSec={positionSec} muted={muted} onToggleMute={() => setMuted((m) => !m)} />

@@ -70,7 +70,7 @@ export function ReactionRail({ onReact }: { onReact: (t: ReactionType) => void }
 export function LivePulse({ heatingUp }: { heatingUp: boolean }) {
   if (!heatingUp) return <div className="h-5" aria-hidden />;
   return (
-    <div className="flex items-center justify-center gap-2 text-label text-lime">
+    <div className="flex items-center justify-center gap-2 text-label text-leaf">
       <span className="h-1.5 w-1.5 rounded-full bg-lime animate-[pulseRing_1.2s_ease-out_infinite]" />
       Heating up
     </div>
@@ -104,7 +104,7 @@ export function MomentDetectedOverlay({ onDone }: { onDone: () => void }) {
         </div>
       ) : (
         <div className="text-center animate-popIn">
-          <p className="text-h3 text-lime">Moment forming…</p>
+          <p className="text-h3 text-leaf">Moment forming…</p>
         </div>
       )}
     </div>
@@ -153,7 +153,7 @@ export function CuratorCelebration({
           <h2 className="text-h1 text-text" aria-live="assertive">
             You found it early.
           </h2>
-          <p className="mt-2 text-h3 text-lime">Founding Curator #{rank}</p>
+          <p className="mt-2 text-h3 text-leaf">Founding Curator #{rank}</p>
           <p className="mt-3 font-mono text-bodysm text-text-secondary">Your reaction helped surface this Moment.</p>
           <div className="mt-5 border border-border bg-surface2 px-4 py-3">
             <p className="text-h2 text-text tabular-nums">{rewardUsd}</p>

@@ -8,7 +8,7 @@ import { IconArrowRight, IconCheck, IconSpark } from "../components/icons";
 function Logo() {
   return (
     <div className="flex items-center gap-2">
-      <span className="grid h-7 w-7 place-items-center bg-lime text-night font-bold">M</span>
+      <span className="grid h-7 w-7 place-items-center bg-lime text-ink font-bold">M</span>
       <span className="text-h3 font-bold tracking-tight">Moment</span>
     </div>
   );
@@ -118,7 +118,7 @@ function Stats() {
         {STATS.map((s, i) => (
           <div key={s.label} className={`relative px-4 py-6 ${i % 2 === 0 ? "border-r border-border" : ""} ${i < 2 ? "border-b md:border-b-0" : ""} md:border-r md:last:border-r-0`}>
             <div className="text-display">{s.big}</div>
-            <div className="mt-2 eyebrow text-micro text-lime">{s.label}</div>
+            <div className="mt-2 eyebrow text-micro text-leaf">{s.label}</div>
             <p className="mt-2 font-mono text-bodysm text-text-secondary">{s.body}</p>
           </div>
         ))}
@@ -169,7 +169,7 @@ function Features() {
                 </div>
               ))}
             </div>
-            <span className="font-mono text-bodysm text-lime">+$1.00 · #1</span>
+            <span className="font-mono text-bodysm text-leaf">+$1.00 · #1</span>
           </div>
         </FeatureCol>
       </div>
@@ -208,7 +208,7 @@ function HowItWorks() {
       <div className="mt-10 border-t border-border">
         {STEPS.map(([t, b], i) => (
           <div key={t} className="flex items-start gap-5 border-b border-border py-5">
-            <span className="eyebrow text-micro text-lime w-8 pt-1">{String(i + 1).padStart(2, "0")}</span>
+            <span className="eyebrow text-micro text-leaf w-8 pt-1">{String(i + 1).padStart(2, "0")}</span>
             <div className="flex-1">
               <h3 className="text-bodylg font-semibold text-text">{t}</h3>
               <p className="mt-1 font-mono text-bodysm text-text-secondary">{b}</p>
@@ -282,7 +282,7 @@ function StartSection() {
             <ul className="mt-6 space-y-3">
               {["No seed phrase or wallet setup", "Wallet created automatically", "Same account across web + mobile"].map((t) => (
                 <li key={t} className="flex items-center gap-3 border-b border-border pb-3 font-mono text-bodysm text-text-secondary">
-                  <IconCheck size={16} className="text-lime" />
+                  <IconCheck size={16} className="text-leaf" />
                   {t}
                 </li>
               ))}

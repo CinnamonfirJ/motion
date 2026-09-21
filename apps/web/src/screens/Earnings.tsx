@@ -24,7 +24,7 @@ export function Earnings() {
         {creator?.momentsGenerated > 0 && (
           <div className="flex border border-border">
             {(["scout", "creator"] as const).map((m) => (
-              <button key={m} onClick={() => setMode(m)} className={`px-3 py-1.5 font-mono text-micro uppercase tracking-[0.1em] ${mode === m ? "bg-lime text-night" : "bg-surface1 text-text-secondary"}`}>
+              <button key={m} onClick={() => setMode(m)} className={`px-3 py-1.5 font-mono text-micro uppercase tracking-[0.1em] ${mode === m ? "bg-lime text-ink" : "bg-surface1 text-text-secondary"}`}>
                 {m}
               </button>
             ))}
@@ -99,7 +99,7 @@ function Stat({ label, value }: { label: string; value: number }) {
 function RewardRow({ to, title, sub, amount, status }: { to: string; title: string; sub: string; amount: string; status: string }) {
   return (
     <Link to={to} className="flex items-center gap-3 border border-border bg-surface1 p-3 hover:border-borderStrong transition-colors">
-      <div className="grid h-11 w-11 place-items-center border border-border bg-surface2 text-lime">
+      <div className="grid h-11 w-11 place-items-center border border-border bg-surface2 text-leaf">
         <span className="h-2 w-2 bg-lime" aria-hidden />
       </div>
       <div className="min-w-0 flex-1">
@@ -107,7 +107,7 @@ function RewardRow({ to, title, sub, amount, status }: { to: string; title: stri
         <p className="font-mono text-micro uppercase tracking-[0.08em] text-text-muted">{sub}</p>
       </div>
       <div className="text-right">
-        <p className="text-body font-semibold text-lime tabular-nums">{amount}</p>
+        <p className="text-body font-semibold text-leaf tabular-nums">{amount}</p>
         <StatusRow status={status} />
       </div>
     </Link>
