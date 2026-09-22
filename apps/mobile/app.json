@@ -9,12 +9,9 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#FEFEFE",
     "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash.png",
-      "backgroundColor": "#FEFEFE",
-      "resizeMode": "contain"
-    },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.ennoia.app"
@@ -24,12 +21,26 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FEFEFE"
-      },
-      "edgeToEdgeEnabled": true
+      }
     },
     "web": {
       "bundler": "metro"
     },
-    "plugins": ["expo-video"]
+    "plugins": [
+      "expo-video",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "backgroundColor": "#FEFEFE",
+          "imageWidth": 260,
+          "resizeMode": "contain"
+        }
+      ],
+      "expo-secure-store",
+      "expo-web-browser",
+      "@livekit/react-native-expo-plugin",
+      "@config-plugins/react-native-webrtc"
+    ]
   }
 }

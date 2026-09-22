@@ -71,6 +71,7 @@ export function Layout() {
           </div>
           <ThemeToggle />
         </div>
+        <div className="flex justify-center gap-3 pt-2 text-micro text-text-muted"><NavLink to="/privacy">Privacy</NavLink><NavLink to="/terms">Terms</NavLink></div>
       </aside>
 
       {/* Mobile top bar */}

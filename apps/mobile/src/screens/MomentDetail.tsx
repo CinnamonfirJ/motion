@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ScrollView, Text, View, Pressable, Linking } from "react-native";
+import { Alert, ScrollView, Text, View, Pressable, Linking } from "react-native";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { api, type MomentDTO } from "../lib/api";
@@ -123,6 +123,22 @@ export function MomentDetail() {
           <Text style={{ color: "#FFFFFF", ...eyebrow(12) }}>Join live</Text>
         </Pressable>
       ) : null}
+      <View style={{ flexDirection: "row", justifyContent: "center", gap: 20, paddingBottom: 12 }}>
+        <Pressable onPress={() => Alert.alert("Report this Moment?", "ENNOIA moderators will review it.", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Report", style: "destructive", onPress: () => { void api.report("moment", moment.id, "inappropriate-content"); } },
+        ])}>
+          <Text style={{ color: color.textMuted, ...type.bodysm }}>Report</Text>
+        </Pressable>
+        {moment.creator ? (
+          <Pressable onPress={() => Alert.alert("Block this creator?", "Their streams and Moments will be hidden from your feeds.", [
+            { text: "Cancel", style: "cancel" },
+            { text: "Block", style: "destructive", onPress: () => { void api.blockUser(moment.creator!.id).then(() => nav.goBack()); } },
+          ])}>
+            <Text style={{ color: color.textMuted, ...type.bodysm }}>Block creator</Text>
+          </Pressable>
+        ) : null}
+      </View>
     </ScrollView>
   );
 }

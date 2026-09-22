@@ -64,3 +64,14 @@ export async function verifyPrivyToken(accessToken: string): Promise<PrivyIdenti
     displayName: nameFromUser(user),
   };
 }
+
+export async function deletePrivyUser(privyId: string): Promise<void> {
+  if (!privyConfigured()) return;
+  try {
+    await getClient().users().delete(privyId);
+  } catch (error) {
+    // Retried deletion jobs are successful when Privy confirms the identity is already gone.
+    if (typeof error === "object" && error !== null && "status" in error && error.status === 404) return;
+    throw error;
+  }
+}

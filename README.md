@@ -26,10 +26,10 @@ clients stay thin and never re-implement business logic per platform (PRD §9, �
 
 | Package | What it is | Notes |
 |---|---|---|
-| `packages/core` | **Shared TypeScript logic**: spike detection, confirmation, Founding-Curator selection, reward math, Moment state machine, stream clock, Merkle batch commitment, config. | Framework-agnostic, no I/O. Imported by the backend **and** every client. 31 unit tests. |
-| `packages/contracts` | **`MomentRewards.sol`** on Monad: `commitReactionBatch` + idempotent `settleMoment`. | Hardhat. 6 tests incl. duplicate-settlement protection. |
+| `packages/core` | **Shared TypeScript logic**: spike detection, confirmation, Founding-Curator selection, reward math, Moment state machine, stream clock, Merkle batch commitment, config. | Framework-agnostic, no I/O. Imported by the backend **and** every client. 42 unit tests. |
+| `packages/contracts` | **`MomentRewards.sol`** on Monad: commitments, Moments, tips, and idempotent settlement. | Hardhat. 8 tests incl. duplicate-settlement protection. |
 | `packages/indexer` | **Envio HyperIndex** for `MomentRewards` events, rolling creator/curator/stream analytics and GraphQL. | Run under Linux/WSL; the app falls back to SQLite when unavailable. |
-| `apps/server` | **Backend** (Fastify + WebSocket + `node:sqlite`): authoritative stream clock, reactions, Moment engine, Monad settlement, earnings, realtime, demo seed. | Owns all product-critical state. |
+| `apps/server` | **Backend** (Fastify + WebSocket + Neon PostgreSQL): authoritative stream clock, reactions, LiveKit/R2 clips, Moment engine, Monad settlement, earnings, realtime, safety. | Owns all product-critical state. SQLite is development-only. |
 | `apps/web` | **Web app** (Vite + React + Tailwind). | Design tokens from `PRODUCT-DESIGN.md`. |
 | `apps/mobile` | **iOS + Android** (Expo / React Native). | One codebase, imports `@ennoia/core`. |
 
@@ -50,17 +50,20 @@ resynchronizes on foreground.
 can never settle before it confirms, and settlement is idempotent on-chain and in the engine.
 
 ### Auth, streaming and indexing
-Each external integration is environment-gated so the zero-credential demo stays usable:
+`APP_MODE=development` permits the zero-credential local demo. `APP_MODE=production`
+fails startup unless Neon, Privy, LiveKit, R2, Monad, Envio, CORS, and signing configuration
+are all present; production never silently falls back to mocks.
 
 - **Privy** is the production source of truth for passkey authentication and the user's
   embedded EVM wallet. The backend verifies Privy access tokens, maps the Privy identity into
   the existing user/session model, and disables legacy auth routes while Privy is configured.
-- **LiveKit** carries real room audio/video. Clients receive only a short-lived room token;
-  the API key and secret remain on the backend. Seeded sample streams remain VOD streams.
+- **LiveKit** carries real room audio/video. LiveKit Egress records HLS segments into
+  **Cloudflare R2**, and the backend creates permanent 15-second pre-roll + 20-second
+  post-roll Moment playlists. Clients receive only short-lived room tokens.
 - **Monad** records economically meaningful activity through `MomentRewards.sol`: reaction
   commitments, Moments, Founding Curators, tips and reward settlement.
 - **Envio** indexes those contract events for feeds, leaderboards and reward analytics. It is
-  never used as the application database; SQLite still owns profiles, streams and raw reactions.
+  never used as the application database; Neon owns profiles, streams and raw reactions.
 
 When Privy is absent, the original WebAuthn/email plus deterministic-wallet path is available
 for local demo use only. See [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) for setup.
@@ -139,9 +142,10 @@ may be exposed to clients; Privy, LiveKit and signing secrets are server-only.
 
 | Variable | Used by | Purpose |
 |---|---|---|
-| `PORT`, `HOST`, `JWT_SECRET`, `DB_PATH` | server | Basic backend config. |
+| `APP_MODE`, `PORT`, `HOST`, `PUBLIC_WEB_URL`, `CORS_ORIGINS`, `JWT_SECRET`, `DATABASE_URL` | server | Runtime mode, origins, sessions, and Neon database. |
 | `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `PRIVY_VERIFICATION_KEY` | server | Verify Privy users and embedded wallets. |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | server | Mint scoped host/viewer room tokens. |
+| `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL` | server | LiveKit Egress and permanent Moment storage. |
 | `ENVIO_GRAPHQL_URL` | server | Read indexed analytics; blank uses SQLite fallback. |
 | `WALLET_MASTER_MNEMONIC` | server | Fallback-only deterministic wallets. **Set a real secret in shared demo envs.** |
 | `UNITS_PER_USD` | server | Display peg (units→USD). Does not affect on-chain amounts. |
@@ -157,7 +161,6 @@ may be exposed to clients; Privy, LiveKit and signing secrets are server-only.
 
 ## Configuration (thresholds & rewards)
 
-All tunables live in **`packages/core/src/config.ts`** (`DEFAULT_CONFIG`) — no magic numbers
-scattered through the app. Spike windows/multiplier, confirmation thresholds, clip pre/post
-roll, Founding-Curator count + rank weights (5/4/3/2/1), and the 70/30 creator/curator split
-are all here and overridable via `makeConfig()`.
+All tunables live in **`packages/core/src/config.ts`** and **`momentConfig.ts`**. Spike windows,
+confirmation thresholds, 15s/20s clipping, Founding-Curator scoring, anti-cheat, and the
+70% creator / 20% curator / 10% platform split are centralized there.

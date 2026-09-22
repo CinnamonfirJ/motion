@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { View } from "react-native";
+import { useEffect } from "react";
 import { SessionProvider, useSession } from "./src/session";
 import { Loading } from "./src/components/ui";
 import { SignIn } from "./src/screens/SignIn";
@@ -13,7 +14,10 @@ import { Moments } from "./src/screens/Moments";
 import { MomentDetail } from "./src/screens/MomentDetail";
 import { Earnings } from "./src/screens/Earnings";
 import { Profile } from "./src/screens/Profile";
+import { GoLive } from "./src/screens/GoLive";
 import { color, MONO } from "./src/theme";
+import { PrivyProvider, type Chain } from "@privy-io/expo";
+import { initializeReactionQueue } from "./src/lib/reaction-queue";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -63,13 +67,23 @@ function Root() {
     <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: color.night }, headerTintColor: color.text, contentStyle: { backgroundColor: color.night } }}>
       <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
       <Stack.Screen name="Live" component={Live} options={{ headerShown: false, presentation: "fullScreenModal" }} />
+      <Stack.Screen name="GoLive" component={GoLive} options={{ title: "Go live", presentation: "modal" }} />
       <Stack.Screen name="MomentDetail" component={MomentDetail} options={{ title: "Moment" }} />
     </Stack.Navigator>
   );
 }
 
 export default function App() {
-  return (
+  useEffect(() => initializeReactionQueue(), []);
+  const appId = process.env.EXPO_PUBLIC_PRIVY_APP_ID?.trim();
+  const monadTestnet: Chain = {
+    id: 10143,
+    name: "Monad Testnet",
+    nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
+    rpcUrls: { default: { http: [process.env.EXPO_PUBLIC_MONAD_RPC_URL || "https://testnet-rpc.monad.xyz"] } },
+    blockExplorers: { default: { name: "Monad Explorer", url: "https://testnet.monadexplorer.com" } },
+  };
+  const content = (
     <SafeAreaProvider>
       <NavigationContainer theme={navTheme}>
         <StatusBar style="light" />
@@ -79,4 +93,14 @@ export default function App() {
       </NavigationContainer>
     </SafeAreaProvider>
   );
+  return appId ? (
+    <PrivyProvider
+      appId={appId}
+      clientId={process.env.EXPO_PUBLIC_PRIVY_CLIENT_ID?.trim() || undefined}
+      supportedChains={[monadTestnet]}
+      config={{ embedded: { ethereum: { createOnLogin: "off" } } }}
+    >
+      {content}
+    </PrivyProvider>
+  ) : content;
 }

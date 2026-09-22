@@ -18,8 +18,8 @@ export function userView(u: User) {
   };
 }
 
-export function streamView(s: Stream, viewerCount: number) {
-  const creator = Users.byId(s.creatorId);
+export async function streamView(s: Stream, viewerCount: number) {
+  const creator = await Users.byId(s.creatorId);
   // A stream renders as a real LiveKit room when LiveKit is configured AND it has no VOD source;
   // seeded sample streams keep a videoUrl and play through the fake-live VOD player.
   const mode: "livekit" | "vod" = livekitConfigured() && !s.videoUrl ? "livekit" : "vod";
@@ -38,8 +38,8 @@ export function streamView(s: Stream, viewerCount: number) {
   };
 }
 
-function curatorView(c: FoundingCurator) {
-  const u = Users.byId(c.userId);
+async function curatorView(c: FoundingCurator) {
+  const u = await Users.byId(c.userId);
   return {
     userId: c.userId,
     rank: c.rank,
@@ -69,9 +69,13 @@ function settlementView(s: Settlement | null) {
   };
 }
 
-export function momentView(m: Moment) {
-  const stream = Streams.byId(m.streamId);
-  const creator = Users.byId(m.creatorId);
+export async function momentView(m: Moment) {
+  const [stream, creator, views, foundingCurators] = await Promise.all([
+    Streams.byId(m.streamId),
+    Users.byId(m.creatorId),
+    Moments.viewsFor(m.id),
+    Promise.all(m.foundingCurators.map(curatorView)),
+  ]);
   return {
     id: m.id,
     streamId: m.streamId,
@@ -85,8 +89,8 @@ export function momentView(m: Moment) {
     metrics: m.metrics,
     creator: creator ? { id: creator.id, displayName: creator.displayName, handle: creator.handle, avatarUrl: creator.avatarUrl } : null,
     streamTitle: stream?.title ?? "",
-    views: Moments.viewsFor(m.id),
-    foundingCurators: m.foundingCurators.map(curatorView),
+    views,
+    foundingCurators,
     foundingCuratorCount: m.foundingCurators.length,
     settlement: settlementView(m.settlement),
     // On-chain identity of this Moment (createMoment/MomentCreated key) — used to cross-reference
@@ -97,4 +101,4 @@ export function momentView(m: Moment) {
   };
 }
 
-export type MomentDTO = ReturnType<typeof momentView>;
+export type MomentDTO = Awaited<ReturnType<typeof momentView>>;

@@ -39,6 +39,7 @@ import { settleMoment } from "./settlement.js";
 import { getChain, hashFns, toBytes32, momentIdHash } from "./chain.js";
 import { noteWatch, watchMs as getWatchMs } from "./watch.js";
 import { env } from "./env.js";
+import { buildPermanentMomentClip, permanentMediaConfigured } from "./media.js";
 
 /** Product config. In a fuller build this could be per-stream; here it is one source of truth. */
 export const config: MomentConfig = DEFAULT_CONFIG;
@@ -57,12 +58,15 @@ export interface IngestResult {
   error?: string;
 }
 
-export function ingestReaction(user: User, input: ReactionInput): IngestResult {
-  const stream = Streams.byId(input.streamId);
+export async function ingestReaction(user: User, input: ReactionInput): Promise<IngestResult> {
+  const stream = await Streams.byId(input.streamId);
   if (!stream || !stream.isLive) return { ok: false, error: "stream-not-live" };
   if (!REACTION_TYPES.includes(input.type)) return { ok: false, error: "bad-type" };
 
   const now = Date.now();
+  if (await Reactions.countForUserSince(stream.id, user.id, now - 60_000) >= ANTI_CHEAT_CONFIG.maxReactionsPerMinute) {
+    return { ok: false, error: "reaction-rate-limited" };
+  }
   const streamTime = reconcileStreamTime(input.clientStreamTimeMs, stream.startedAt, now);
 
   // Watch-time eligibility: record first-seen, then read accrued watch time (ENNOIA anti-cheat).
@@ -83,7 +87,7 @@ export function ingestReaction(user: User, input: ReactionInput): IngestResult {
     batchId: null,
   };
 
-  const { reaction: stored, created } = Reactions.insert(reaction);
+  const { reaction: stored, created } = await Reactions.insert(reaction);
   if (!created) return { ok: true, reaction: stored, duplicate: true };
 
   // Immediate client feedback + realtime propagation (PRD §12 / design §7.6).
@@ -93,11 +97,11 @@ export function ingestReaction(user: User, input: ReactionInput): IngestResult {
     reactionType: reaction.type,
     streamTimeMs: reaction.streamTimeMs,
   });
-  broadcastActivity(stream.id, now);
+  await broadcastActivity(stream.id, now);
 
   // Detection runs on ingest for responsiveness; the tick loop is the safety net.
   try {
-    detect(stream.id, now);
+    await detect(stream.id, now);
   } catch (e) {
     console.error("detect error", e);
   }
@@ -105,18 +109,18 @@ export function ingestReaction(user: User, input: ReactionInput): IngestResult {
   return { ok: true, reaction: stored };
 }
 
-function broadcastActivity(streamId: string, now: number) {
+async function broadcastActivity(streamId: string, now: number) {
   const recentMs = SPIKE_CONFIG.recentWindowSeconds * 1000;
-  const recent = Reactions.inWindow(streamId, now - recentMs, now);
+  const recent = await Reactions.inWindow(streamId, now - recentMs, now);
   const ratePerSec = recent.length / SPIKE_CONFIG.recentWindowSeconds;
   const recentByType = { fire: 0, laugh: 0, wow: 0 } as Record<ReactionType, number>;
   for (const r of recent) recentByType[r.type]++;
 
   // "Heating up": unique eligible reactors rising toward the spike threshold (never expose numbers).
   const baselineMs = SPIKE_CONFIG.baselineWindowSeconds * 1000;
-  const evalr = evaluateUniqueSpike(toReactorSamples(Reactions.inWindow(streamId, now - baselineMs, now)), {
+  const evalr = evaluateUniqueSpike(toReactorSamples(await Reactions.inWindow(streamId, now - baselineMs, now)), {
     now,
-    cooldownUntil: Moments.cooldownUntil(streamId),
+    cooldownUntil: await Moments.cooldownUntil(streamId),
   });
   const heatingUp = !evalr.isSpike && evalr.uniqueRecent >= Math.max(2, Math.ceil(evalr.threshold * 0.6));
 
@@ -124,17 +128,17 @@ function broadcastActivity(streamId: string, now: number) {
 }
 
 // ---------- detection (ENNOIA unique-reactor spike) ----------
-function detect(streamId: string, now: number) {
-  const stream = Streams.byId(streamId);
+async function detect(streamId: string, now: number) {
+  const stream = await Streams.byId(streamId);
   if (!stream || !stream.isLive) return;
   // One active candidate per stream at a time (overlapping Moments -> cooldown/merge).
-  if (Moments.activeForStream(streamId).length > 0) return;
+  if ((await Moments.activeForStream(streamId)).length > 0) return;
 
   const baselineMs = SPIKE_CONFIG.baselineWindowSeconds * 1000;
-  const history = Reactions.inWindow(streamId, now - baselineMs, now);
+  const history = await Reactions.inWindow(streamId, now - baselineMs, now);
   const evalr = evaluateUniqueSpike(toReactorSamples(history), {
     now,
-    cooldownUntil: Moments.cooldownUntil(streamId),
+    cooldownUntil: await Moments.cooldownUntil(streamId),
   });
   if (!evalr.isSpike) return;
 
@@ -155,10 +159,10 @@ function detect(streamId: string, now: number) {
     updatedAt: now,
   };
   const cooldownUntil = now + SPIKE_CONFIG.cooldownSeconds * 1000;
-  Moments.insert(moment, cooldownUntil);
+  await Moments.insert(moment, cooldownUntil);
 
   // CANDIDATE -> DETECTING immediately: the UI shows "Moment detected" (design §7.8).
-  transition(moment, "DETECTING");
+  await transition(moment, "DETECTING");
   hub.broadcastStream(streamId, {
     t: "moment_detected",
     streamId,
@@ -174,9 +178,9 @@ function detect(streamId: string, now: number) {
 // ---------- lifecycle tick ----------
 export async function tick() {
   const now = Date.now();
-  for (const stream of Streams.live()) detectSafe(stream.id, now);
+  for (const stream of await Streams.live()) await detectSafe(stream.id, now);
 
-  for (const moment of Moments.needingWork()) {
+  for (const moment of await Moments.needingWork()) {
     try {
       await advance(moment, now);
     } catch (e) {
@@ -185,9 +189,9 @@ export async function tick() {
   }
 }
 
-function detectSafe(streamId: string, now: number) {
+async function detectSafe(streamId: string, now: number) {
   try {
-    detect(streamId, now);
+    await detect(streamId, now);
   } catch (e) {
     console.error("detect(tick) error", e);
   }
@@ -196,21 +200,21 @@ function detectSafe(streamId: string, now: number) {
 async function advance(moment: Moment, now: number) {
   switch (moment.state) {
     case "DETECTING":
-      if (now - moment.detectedAt >= config.confirmation.windowMs) resolveConfirmation(moment, now);
+      if (now - moment.detectedAt >= config.confirmation.windowMs) await resolveConfirmation(moment, now);
       return;
     case "CONFIRMED":
-      startClipping(moment, now);
+      await startClipping(moment, now);
       return;
     case "CLIPPING":
-      if (moment.clip.ready || now - (moment.confirmedAt ?? now) >= CLIP_PROCESSING_MS) finishClipping(moment);
+      await finishClipping(moment, now);
       return;
     case "SETTLING":
       // Publish the card immediately as "reward pending"; payout waits on the success threshold.
-      publishMoment(moment);
+      await publishMoment(moment);
       return;
     case "PUBLISHED":
       // Settle once the Moment reaches its success threshold (DEMO: ~10s after confirmation).
-      if ((!moment.settlement || moment.settlement.status !== "confirmed") && successMet(moment, now)) {
+      if ((!moment.settlement || moment.settlement.status !== "confirmed") && await successMet(moment, now)) {
         await settleAndFinalize(moment, now);
       }
       return;
@@ -219,15 +223,15 @@ async function advance(moment: Moment, now: number) {
 
 /** MOMENT_SUCCESS_CONFIG gate: settle once the Moment reaches its success threshold (real
  *  views), OR — as a demo guarantee so the loop always completes — ~10s after confirmation. */
-function successMet(moment: Moment, now: number): boolean {
+async function successMet(moment: Moment, now: number): Promise<boolean> {
   if (moment.confirmedAt == null) return false;
-  const views = Moments.viewsFor(moment.id);
+  const views = await Moments.viewsFor(moment.id);
   if (views >= MOMENT_SUCCESS_CONFIG.minimumViews) return true;
-  return now - moment.confirmedAt >= MOMENT_SUCCESS_CONFIG.demoSettleAfterMs;
+  return !env.IS_PRODUCTION && now - moment.confirmedAt >= MOMENT_SUCCESS_CONFIG.demoSettleAfterMs;
 }
 
-function publishMoment(moment: Moment) {
-  transition(moment, "PUBLISHED");
+async function publishMoment(moment: Moment) {
+  await transition(moment, "PUBLISHED");
   hub.broadcastStream(moment.streamId, { t: "moment", streamId: moment.streamId, momentId: moment.id, state: "PUBLISHED" });
   hub.broadcastStream(moment.streamId, {
     t: "settlement",
@@ -256,7 +260,7 @@ export async function tipStream(streamId: string, amountWei: bigint): Promise<{ 
 export async function demoFastForwardSettlement(streamId: string): Promise<number> {
   const now = Date.now();
   let n = 0;
-  for (const m of Moments.publicFeed(50)) {
+  for (const m of await Moments.publicFeed(50)) {
     if (m.streamId !== streamId) continue;
     if (m.state === "PUBLISHED" && (!m.settlement || m.settlement.status !== "confirmed")) {
       await settleAndFinalize(m, now);
@@ -267,14 +271,14 @@ export async function demoFastForwardSettlement(streamId: string): Promise<numbe
 }
 
 // ---------- confirmation + curators ----------
-function candidateReactions(moment: Moment, deadline: number): Reaction[] {
+async function candidateReactions(moment: Moment, deadline: number): Promise<Reaction[]> {
   const from = moment.detectedAt - config.spike.recentWindowMs;
   return Reactions.inWindow(moment.streamId, from, deadline);
 }
 
-function resolveConfirmation(moment: Moment, now: number) {
+async function resolveConfirmation(moment: Moment, now: number) {
   const deadline = now;
-  const reactions = candidateReactions(moment, deadline);
+  const reactions = await candidateReactions(moment, deadline);
   const curatorReactions: CuratorReaction[] = reactions.map((r) => ({
     userId: r.userId,
     walletAddress: r.walletAddress,
@@ -285,7 +289,7 @@ function resolveConfirmation(moment: Moment, now: number) {
 
   const conf = evaluateConfirmation(curatorReactions, config.confirmation);
   if (!conf.confirmed) {
-    transition(moment, "EXPIRED");
+    await transition(moment, "EXPIRED");
     hub.broadcastStream(moment.streamId, { t: "moment", streamId: moment.streamId, momentId: moment.id, state: "EXPIRED" });
     console.log(`[moment] expired ${moment.id} (${conf.reason})`);
     return;
@@ -295,6 +299,8 @@ function resolveConfirmation(moment: Moment, now: number) {
   // eligible, deduplicated users — reward legitimate early discovery, not spam clicking.
   const minWatchMs = ANTI_CHEAT_CONFIG.minimumWatchSeconds * 1000;
   const byUser = new Map<string, CandidateReactor>();
+  const reactionCounts = new Map<string, number>();
+  for (const reaction of reactions) reactionCounts.set(reaction.userId, (reactionCounts.get(reaction.userId) ?? 0) + 1);
   for (const r of reactions) {
     if (r.watchTimeMs < minWatchMs) continue; // eligibility
     const cur = byUser.get(r.userId);
@@ -305,8 +311,8 @@ function resolveConfirmation(moment: Moment, now: number) {
         firstServerTimeMs: r.serverTimeMs,
         firstStreamTimeMs: r.streamTimeMs,
         watchMs: r.watchTimeMs,
-        reputation: Moments.reputationFor(r.userId),
-        antiBotScore: 1, // MVP stub: 1 = clean (device/IP clustering is flag-only)
+        reputation: await Moments.reputationFor(r.userId),
+        antiBotScore: Math.max(0, 1 - Math.max(0, (reactionCounts.get(r.userId) ?? 1) - 5) / 15),
       });
     }
   }
@@ -340,8 +346,8 @@ function resolveConfirmation(moment: Moment, now: number) {
     error: null,
   };
 
-  Moments.setCurators(moment.id, curators);
-  transition(moment, "CONFIRMED");
+  await Moments.setCurators(moment.id, curators);
+  await transition(moment, "CONFIRMED");
 
   hub.broadcastStream(moment.streamId, { t: "moment", streamId: moment.streamId, momentId: moment.id, state: "CONFIRMED" });
   // Personal celebration to each Founding Curator (design §7.10, PRD §23.5).
@@ -370,7 +376,7 @@ async function createMomentOnChain(moment: Moment, curators: FoundingCurator[]) 
   if (!chain.enabled || !chain.contract) return; // simulation: nothing to record on-chain
   try {
     const contract = chain.contract as any;
-    const creator = Users.byId(moment.creatorId);
+    const creator = await Users.byId(moment.creatorId);
     if (await contract.momentCreated(momentIdHash(moment.id))) return; // idempotent
     const tx = await contract.createMoment(
       momentIdHash(moment.id),
@@ -389,18 +395,57 @@ async function createMomentOnChain(moment: Moment, curators: FoundingCurator[]) 
 }
 
 // ---------- clipping ----------
-function startClipping(moment: Moment, now: number) {
-  const stream = Streams.byId(moment.streamId);
+async function startClipping(moment: Moment, now: number) {
+  const stream = await Streams.byId(moment.streamId);
   if (!stream) return;
   moment.clip = buildClip(moment, stream.startedAt, stream.durationSec, stream.videoUrl, now, stream.isLive);
-  transition(moment, "CLIPPING");
+  await transition(moment, "CLIPPING");
   hub.broadcastStream(moment.streamId, { t: "moment", streamId: moment.streamId, momentId: moment.id, state: "CLIPPING" });
 }
 
-function finishClipping(moment: Moment) {
-  moment.clip = { ...moment.clip, ready: true };
-  Moments.update(moment);
-  transition(moment, "SETTLING");
+async function finishClipping(moment: Moment, now: number) {
+  if (moment.clip.ready) return;
+  const stream = await Streams.byId(moment.streamId);
+  const recording = await Streams.recording(moment.streamId);
+  if (!stream || !recording) return;
+
+  const availableUntilMs = recording.endedAt == null
+    ? streamTimeMs(stream.startedAt, now)
+    : Math.max(0, recording.endedAt - stream.startedAt);
+  if (recording.endedAt != null && availableUntilMs < moment.clip.endStreamTimeMs) {
+    moment.clip = {
+      ...moment.clip,
+      endStreamTimeMs: availableUntilMs,
+      durationSec: round2(Math.max(0, availableUntilMs - moment.clip.startStreamTimeMs) / 1000),
+    };
+  }
+  if (availableUntilMs < moment.clip.endStreamTimeMs) return;
+
+  if (permanentMediaConfigured()) {
+    if (!recording.recordingPrefix || recording.recordingStartedAt == null) {
+      throw new Error(`stream-recording-missing:${moment.streamId}`);
+    }
+    const firstRecordedStreamTimeMs = Math.max(0, recording.recordingStartedAt - stream.startedAt);
+    if (moment.clip.startStreamTimeMs < firstRecordedStreamTimeMs) {
+      moment.clip = {
+        ...moment.clip,
+        startStreamTimeMs: firstRecordedStreamTimeMs,
+        durationSec: round2(Math.max(0, moment.clip.endStreamTimeMs - firstRecordedStreamTimeMs) / 1000),
+      };
+    }
+    try {
+      const url = await buildPermanentMomentClip(moment, stream, recording.recordingPrefix, recording.recordingStartedAt);
+      moment.clip = { ...moment.clip, url, ready: true };
+    } catch (error) {
+      if (error instanceof Error && error.message === "clip-not-ready") return;
+      throw error;
+    }
+  } else {
+    if (now - (moment.confirmedAt ?? now) < CLIP_PROCESSING_MS) return;
+    moment.clip = { ...moment.clip, ready: true };
+  }
+  await Moments.update(moment);
+  await transition(moment, "SETTLING");
   hub.broadcastStream(moment.streamId, { t: "moment", streamId: moment.streamId, momentId: moment.id, state: "SETTLING" });
 }
 
@@ -438,14 +483,14 @@ function buildClip(moment: Moment, startedAt: number, durationSec: number, video
 
 // ---------- settlement (real Monad tx or idempotent simulation) ----------
 async function settleAndFinalize(moment: Moment, _now: number) {
-  const creator = Users.byId(moment.creatorId);
+  const creator = await Users.byId(moment.creatorId);
   const creatorWallet = creator?.walletAddress ?? moment.foundingCurators[0]?.walletAddress ?? "";
 
   const outcome = await settleMoment(moment, config, creatorWallet);
   moment.settlement = outcome.settlement;
-  Moments.setCurators(moment.id, outcome.curators);
+  await Moments.setCurators(moment.id, outcome.curators);
   moment.foundingCurators = outcome.curators;
-  Moments.update(moment);
+  await Moments.update(moment);
 
   hub.broadcastStream(moment.streamId, {
     t: "settlement",
@@ -463,7 +508,7 @@ async function settleAndFinalize(moment: Moment, _now: number) {
   }
 
   if (moment.settlement.status === "confirmed" && moment.state === "PUBLISHED") {
-    transition(moment, "SETTLED");
+    await transition(moment, "SETTLED");
     hub.broadcastStream(moment.streamId, { t: "moment", streamId: moment.streamId, momentId: moment.id, state: "SETTLED" });
     console.log(`[moment] settled ${moment.id} ${outcome.simulated ? "(simulated)" : "(onchain)"} tx=${moment.settlement.txHash}`);
   }
@@ -483,7 +528,7 @@ async function commitBatch(moment: Moment, reactions: Reaction[], deadline: numb
   const batchId = newId("bat");
   const from = Math.min(...reactions.map((r) => r.serverTimeMs));
 
-  Batches.insert({
+  await Batches.insert({
     id: batchId,
     streamId: moment.streamId,
     fromServerTimeMs: from,
@@ -494,11 +539,11 @@ async function commitBatch(moment: Moment, reactions: Reaction[], deadline: numb
     txHash: null,
     createdAt: Date.now(),
   });
-  Reactions.markBatched(reactions.map((r) => r.id), batchId);
+  await Reactions.markBatched(reactions.map((r) => r.id), batchId);
 
   const chain = getChain();
   if (!chain.enabled || !chain.contract) {
-    Batches.setStatus(batchId, "confirmed", null);
+    await Batches.setStatus(batchId, "confirmed", null);
     return;
   }
   try {
@@ -511,21 +556,21 @@ async function commitBatch(moment: Moment, reactions: Reaction[], deadline: numb
       Math.floor(deadline / 1000),
       commitment
     );
-    Batches.setStatus(batchId, "submitted", tx.hash);
+    await Batches.setStatus(batchId, "submitted", tx.hash);
     await tx.wait(1);
-    Batches.setStatus(batchId, "confirmed", tx.hash);
+    await Batches.setStatus(batchId, "confirmed", tx.hash);
   } catch (e) {
     console.error("batch commit failed", e);
-    Batches.setStatus(batchId, "failed", null);
+    await Batches.setStatus(batchId, "failed", null);
   }
 }
 
 // ---------- helpers ----------
-function transition(moment: Moment, to: Moment["state"]) {
+async function transition(moment: Moment, to: Moment["state"]) {
   assertTransition(moment.state, to);
   moment.state = to;
   moment.updatedAt = Date.now();
-  Moments.update(moment);
+  await Moments.update(moment);
 }
 
 function computeMetrics(reactions: Reaction[], spikeStreamTimeMs: number): MomentMetrics {

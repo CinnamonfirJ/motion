@@ -1,26 +1,28 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { streamPositionSec, type Platform, type ReactionType, type User } from "@ennoia/core";
-import { Users, Streams, Moments, Reactions } from "./store.js";
+import { Users, Streams, Moments, Reactions, Safety, AccountDeletions, type ReportTarget } from "./store.js";
 import { deriveWallet, issueToken, verifyToken, normalizeAuthId } from "./auth.js";
 import { issueChallenge, verifyClientData, Passkeys } from "./passkey.js";
 import { env, privyConfigured, livekitConfigured, envioConfigured } from "./env.js";
 import { verifyPrivyToken } from "./privy.js";
+import { processAccountDeletionJob } from "./accountDeletion.js";
 import { roomTokenFor } from "./livekit.js";
 import { topCurators, trendingMoments, rewardHistory } from "./envio.js";
-import { randomBytes } from "node:crypto";
-import { ingestReaction, config, tipStream, demoFastForwardSettlement } from "./momentEngine.js";
+import { createHmac, randomBytes } from "node:crypto";
+import { ingestReaction, config, demoFastForwardSettlement } from "./momentEngine.js";
 import { demoCrowd, demoForceSpike, demoResetStream } from "./seed.js";
 import { hub } from "./realtime.js";
 import { momentView, streamView, userView, usd } from "./view.js";
-import { getChain, momentIdHash } from "./chain.js";
+import { getChain, momentIdHash, toBytes32 } from "./chain.js";
 import { streamTimeMs } from "@ennoia/core";
+import { permanentMediaConfigured, startStreamRecording, stopStreamRecording } from "./media.js";
 
-function bearer(req: FastifyRequest): User | null {
+async function bearer(req: FastifyRequest): Promise<User | null> {
   const h = req.headers.authorization;
   if (!h?.startsWith("Bearer ")) return null;
   const claims = verifyToken(h.slice(7));
   if (!claims) return null;
-  const user = Users.byId(claims.userId);
+  const user = await Users.byId(claims.userId);
   // Once Privy is configured, legacy fallback identities must not authorize protected actions.
   if (privyConfigured() && !user?.privyId) return null;
   return user;
@@ -29,6 +31,14 @@ function bearer(req: FastifyRequest): User | null {
 function handleFromName(name: string): string {
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 14) || "scout";
   return `${base}${Math.floor(Math.random() * 900 + 100)}`;
+}
+
+function viewerKey(req: FastifyRequest): string {
+  const header = req.headers.authorization;
+  const claims = header?.startsWith("Bearer ") ? verifyToken(header.slice(7)) : null;
+  if (claims?.userId) return `user:${claims.userId}`;
+  const anonymous = `${req.ip}|${req.headers["user-agent"] ?? "unknown"}`;
+  return `anon:${createHmac("sha256", env.JWT_SECRET).update(anonymous).digest("hex")}`;
 }
 
 export async function registerRoutes(app: FastifyInstance) {
@@ -63,11 +73,11 @@ export async function registerRoutes(app: FastifyInstance) {
     }
     if (!identity.walletAddress) return reply.code(400).send({ error: "no-embedded-wallet" });
 
-    let user = Users.byPrivyId(identity.privyId);
+    let user = await Users.byPrivyId(identity.privyId);
     if (!user) {
       const displayName = body.displayName?.trim() || identity.displayName || "Scout";
       try {
-        user = Users.create({
+        user = await Users.create({
           authId: `privy:${identity.privyId}`,
           privyId: identity.privyId,
           displayName,
@@ -78,13 +88,13 @@ export async function registerRoutes(app: FastifyInstance) {
         });
       } catch (error) {
         // Two clients can exchange the same freshly-created Privy identity concurrently.
-        user = Users.byPrivyId(identity.privyId);
+        user = await Users.byPrivyId(identity.privyId);
         if (!user) throw error;
       }
     } else if (user.walletAddress !== identity.walletAddress) {
       // Keep the embedded wallet in sync if Privy rotated/added it.
-      Users.linkPrivy(user.id, identity.privyId, identity.walletAddress);
-      user = Users.byId(user.id)!;
+      await Users.linkPrivy(user.id, identity.privyId, identity.walletAddress);
+      user = (await Users.byId(user.id))!;
     }
     return { token: issueToken(user.id), user: userView(user) };
   });
@@ -97,11 +107,11 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!subject) return reply.code(400).send({ error: "email or subject required" });
 
     const authId = normalizeAuthId(provider, subject);
-    let user = Users.byAuthId(authId);
+    let user = await Users.byAuthId(authId);
     if (!user) {
       const wallet = deriveWallet(authId);
       const displayName = body.displayName?.trim() || subject.split("@")[0] || "Scout";
-      user = Users.create({
+      user = await Users.create({
         authId,
         displayName,
         handle: handleFromName(displayName),
@@ -144,11 +154,11 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!v.ok) return reply.code(400).send({ error: v.error });
 
     const authId = `passkey:${body.credentialId}`;
-    let user = Users.byAuthId(authId);
+    let user = await Users.byAuthId(authId);
     if (!user) {
       const wallet = deriveWallet(authId);
       const displayName = body.displayName?.trim() || "Scout";
-      user = Users.create({
+      user = await Users.create({
         authId,
         displayName,
         handle: handleFromName(displayName),
@@ -157,7 +167,7 @@ export async function registerRoutes(app: FastifyInstance) {
         isCreator: false,
       });
     }
-    Passkeys.add(body.credentialId, user.id, null);
+    await Passkeys.add(body.credentialId, user.id, null);
     return { token: issueToken(user.id), user: userView(user) };
   });
 
@@ -178,15 +188,15 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!body.credentialId || !body.clientDataJSON) return reply.code(400).send({ error: "missing fields" });
     const v = verifyClientData(body.clientDataJSON, "webauthn.get", env.RP_ORIGINS);
     if (!v.ok) return reply.code(400).send({ error: v.error });
-    const userId = Passkeys.userIdFor(body.credentialId);
+    const userId = await Passkeys.userIdFor(body.credentialId);
     if (!userId) return reply.code(404).send({ error: "no-passkey-account" });
-    const user = Users.byId(userId);
+    const user = await Users.byId(userId);
     if (!user) return reply.code(404).send({ error: "no-passkey-account" });
     return { token: issueToken(user.id), user: userView(user) };
   });
 
   app.get("/me", async (req, reply) => {
-    const user = bearer(req);
+    const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
     const chain = getChain();
     return {
@@ -196,48 +206,51 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   // ---------- streams ----------
-  app.get("/streams", async () => {
-    return { streams: Streams.live().map((s) => streamView(s, hub.viewerCount(s.id))) };
+  app.get("/streams", async (req) => {
+    const user = await bearer(req);
+    const blocked = new Set(user ? await Safety.blockedIds(user.id) : []);
+    const streams = (await Streams.live()).filter((stream) => !blocked.has(stream.creatorId));
+    return { streams: await Promise.all(streams.map((s) => streamView(s, hub.viewerCount(s.id)))) };
   });
 
   app.get("/streams/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const stream = Streams.byId(id);
+    const stream = await Streams.byId(id);
     if (!stream) return reply.code(404).send({ error: "not found" });
-    const active = Moments.activeForStream(id).map(momentView);
+    const active = await Promise.all((await Moments.activeForStream(id)).map(momentView));
     const now = Date.now();
     return {
-      stream: streamView(stream, hub.viewerCount(id)),
+      stream: await streamView(stream, hub.viewerCount(id)),
       sync: syncPayload(stream.startedAt, stream.durationSec, now),
       activeMoments: active,
-      recentReactionCount: Reactions.countForStream(id),
+      recentReactionCount: await Reactions.countForStream(id),
     };
   });
 
   // Clock sync (PRD §8/§40): clients derive playback + reaction timing from this.
   app.get("/streams/:id/sync", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const stream = Streams.byId(id);
+    const stream = await Streams.byId(id);
     if (!stream) return reply.code(404).send({ error: "not found" });
     return syncPayload(stream.startedAt, stream.durationSec, Date.now());
   });
 
   app.get("/streams/:id/moments", async (req) => {
     const { id } = req.params as { id: string };
-    const active = Moments.activeForStream(id);
-    return { active: active.map(momentView) };
+    const active = await Moments.activeForStream(id);
+    return { active: await Promise.all(active.map(momentView)) };
   });
 
   // ---------- livestream (LiveKit) ----------
   // Go live: create/relaunch a stream owned by the caller. Room = stream id. When LiveKit is
   // configured the caller publishes into a real room; otherwise the stream carries a VOD url.
   app.post("/streams", async (req, reply) => {
-    const user = bearer(req);
+    const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
     const body = (req.body ?? {}) as { title?: string; videoUrl?: string; durationSec?: number; thumbnailUrl?: string };
     const now = Date.now();
     const id = `stream_${user.handle}_${Math.floor(now / 1000)}`;
-    const stream = Streams.upsert({
+    const stream = await Streams.upsert({
       id,
       creatorId: user.id,
       title: body.title?.trim() || `${user.displayName} live`,
@@ -249,25 +262,48 @@ export async function registerRoutes(app: FastifyInstance) {
       isLive: true,
       createdAt: now,
     });
-    return { stream: streamView(stream, 0) };
+    if (permanentMediaConfigured()) {
+      try {
+        const recording = await startStreamRecording(id);
+        await Streams.setRecording(id, recording.egressId, recording.prefix, recording.startedAt);
+      } catch (error) {
+        await Streams.end(id);
+        req.log.error({ error, streamId: id }, "failed to start permanent stream recording");
+        return reply.code(502).send({ error: "recording-start-failed" });
+      }
+    }
+    return { stream: await streamView(stream, 0) };
   });
 
   // Mint a LiveKit room token. Host grant only for the stream's creator; everyone else viewer.
   app.post("/streams/:id/livekit-token", async (req, reply) => {
-    const user = bearer(req);
+    const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
     if (!livekitConfigured()) return reply.code(400).send({ error: "livekit-not-configured" });
     const { id } = req.params as { id: string };
-    const stream = Streams.byId(id);
+    const stream = await Streams.byId(id);
     if (!stream) return reply.code(404).send({ error: "not found" });
     const role = stream.creatorId === user.id ? "host" : "viewer";
     const t = await roomTokenFor(user, id, role);
     return { url: t.url, token: t.token, room: t.room, role: t.role };
   });
 
+  app.post("/streams/:id/end", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const { id } = req.params as { id: string };
+    const stream = await Streams.byId(id);
+    if (!stream) return reply.code(404).send({ error: "not found" });
+    if (stream.creatorId !== user.id) return reply.code(403).send({ error: "creator-only" });
+    const recording = await Streams.recording(id);
+    await stopStreamRecording(recording?.egressId ?? null);
+    await Streams.end(id);
+    return { ok: true, endedAt: Date.now() };
+  });
+
   // ---------- reactions ----------
   app.post("/reactions", async (req, reply) => {
-    const user = bearer(req);
+    const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
     const body = (req.body ?? {}) as {
       streamId?: string;
@@ -278,35 +314,49 @@ export async function registerRoutes(app: FastifyInstance) {
     };
     if (!body.streamId || !body.type) return reply.code(400).send({ error: "streamId and type required" });
 
-    const result = ingestReaction(user, {
+    const result = await ingestReaction(user, {
       streamId: body.streamId,
       type: body.type,
       clientStreamTimeMs: Number(body.clientStreamTimeMs ?? 0),
       platform: body.platform ?? "web",
       eventId: body.eventId ?? "",
     });
-    if (!result.ok) return reply.code(409).send({ error: result.error });
+    if (!result.ok) return reply.code(result.error === "reaction-rate-limited" ? 429 : 409).send({ error: result.error });
     return { ok: true, duplicate: result.duplicate ?? false };
   });
 
-  // ---------- tips (fund a stream's reward pool) ----------
+  // ---------- tips ----------
+  // The client signs this transaction through the user's Privy wallet. The backend never
+  // spends settler funds on a user's behalf.
   app.post("/streams/:id/tip", async (req, reply) => {
-    const user = bearer(req);
+    const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
     const { id } = req.params as { id: string };
-    if (!Streams.byId(id)) return reply.code(404).send({ error: "not found" });
-    // Fixed demo tip amount (consumer UI shows a friendly label, never wei/gas).
-    const amountWei = 5_000_000_000_000_000n; // 0.005 MON
-    const r = await tipStream(id, amountWei);
-    return { ok: r.ok, onchain: r.onchain, amountUsd: usd(amountWei) };
+    if (!await Streams.byId(id)) return reply.code(404).send({ error: "not found" });
+    const chain = getChain();
+    if (!chain.enabled || !chain.contract) return reply.code(503).send({ error: "chain-not-configured" });
+    const body = (req.body ?? {}) as { amountWei?: string };
+    const amountWei = BigInt(body.amountWei ?? "5000000000000000");
+    const allowed = new Set([1_000_000_000_000_000n, 5_000_000_000_000_000n, 10_000_000_000_000_000n]);
+    if (!allowed.has(amountWei)) return reply.code(400).send({ error: "unsupported-tip-amount" });
+    return {
+      transaction: {
+        to: String(chain.contract.target),
+        data: chain.contract.interface.encodeFunctionData("tip", [toBytes32(id)]),
+        value: `0x${amountWei.toString(16)}`,
+        chainId: env.MONAD_CHAIN_ID,
+      },
+      amountWei: amountWei.toString(),
+      amountUsd: usd(amountWei),
+    };
   });
 
   // ---------- manual clip ("Clip it") — does NOT grant Founding Curator status ----------
   app.post("/streams/:id/clip", async (req, reply) => {
-    const user = bearer(req);
+    const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
     const { id } = req.params as { id: string };
-    const stream = Streams.byId(id);
+    const stream = await Streams.byId(id);
     if (!stream) return reply.code(404).send({ error: "not found" });
     const body = (req.body ?? {}) as { clientStreamTimeMs?: number };
     const at = Number(body.clientStreamTimeMs ?? streamTimeMs(stream.startedAt, Date.now()));
@@ -319,59 +369,66 @@ export async function registerRoutes(app: FastifyInstance) {
     };
   });
 
-  // ---------- DEMO panel (hidden; simulate INPUTS into the real pipeline; never fake settlement) ----------
-  app.get("/demo/crowd", async () => ({ crowd: demoCrowd(), label: "Demo crowd" }));
-  app.post("/demo/force-spike", async (req) => {
-    const { streamId } = (req.body ?? {}) as { streamId?: string };
-    const sent = streamId ? demoForceSpike(streamId) : 0;
-    return { ok: true, reactionsSent: sent };
-  });
-  app.post("/demo/fast-forward", async (req) => {
-    const { streamId } = (req.body ?? {}) as { streamId?: string };
-    const settled = streamId ? await demoFastForwardSettlement(streamId) : 0;
-    return { ok: true, settled };
-  });
-  app.post("/demo/reset", async (req) => {
-    const { streamId } = (req.body ?? {}) as { streamId?: string };
-    if (streamId) demoResetStream(streamId);
-    return { ok: true };
-  });
+  // ---------- development-only demo controls ----------
+  if (env.ENABLE_DEMO_ROUTES) {
+    app.get("/demo/crowd", async () => ({ crowd: demoCrowd(), label: "Demo crowd" }));
+    app.post("/demo/force-spike", async (req) => {
+      const { streamId } = (req.body ?? {}) as { streamId?: string };
+      const sent = streamId ? await demoForceSpike(streamId) : 0;
+      return { ok: true, reactionsSent: sent };
+    });
+    app.post("/demo/fast-forward", async (req) => {
+      const { streamId } = (req.body ?? {}) as { streamId?: string };
+      const settled = streamId ? await demoFastForwardSettlement(streamId) : 0;
+      return { ok: true, settled };
+    });
+    app.post("/demo/reset", async (req) => {
+      const { streamId } = (req.body ?? {}) as { streamId?: string };
+      if (streamId) demoResetStream(streamId);
+      return { ok: true };
+    });
+  }
 
   // ---------- moments ----------
-  app.get("/moments", async () => ({ moments: Moments.publicFeed(50).map(momentView) }));
+  app.get("/moments", async (req) => {
+    const user = await bearer(req);
+    const blocked = new Set(user ? await Safety.blockedIds(user.id) : []);
+    const moments = (await Moments.publicFeed(50)).filter((moment) => !blocked.has(moment.creatorId));
+    return { moments: await Promise.all(moments.map(momentView)) };
+  });
 
   app.get("/moments/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const m = Moments.byId(id);
+    const m = await Moments.byId(id);
     if (!m) return reply.code(404).send({ error: "not found" });
-    Moments.incrementViews(id); // real success signal
-    return { moment: momentView(m) };
+    await Moments.recordView(id, viewerKey(req));
+    return { moment: await momentView(m) };
   });
 
   // ---------- earnings ----------
   app.get("/earnings/scout", async (req, reply) => {
-    const user = bearer(req);
+    const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
-    const entries = Moments.curatorMomentsFor(user.id);
+    const entries = await Moments.curatorMomentsFor(user.id);
     let total = 0n;
     let firstFinds = 0;
-    const rewards = entries
-      .sort((a, b) => (b.moment.confirmedAt ?? 0) - (a.moment.confirmedAt ?? 0))
-      .map(({ moment, curator }) => {
+    const rewards = [];
+    for (const { moment, curator } of entries.sort((a, b) => (b.moment.confirmedAt ?? 0) - (a.moment.confirmedAt ?? 0))) {
         total += curator.rewardUnits;
         if (curator.rank === 1) firstFinds++;
-        return {
+        const view = await momentView(moment);
+        rewards.push({
           momentId: moment.id,
-          streamTitle: momentView(moment).streamTitle,
-          creator: momentView(moment).creator,
+          streamTitle: view.streamTitle,
+          creator: view.creator,
           rank: curator.rank,
           rewardUnits: curator.rewardUnits.toString(),
           rewardUsd: usd(curator.rewardUnits),
           status: moment.settlement?.status ?? "pending",
           clip: moment.clip,
           confirmedAt: moment.confirmedAt,
-        };
-      });
+        });
+    }
     return {
       totalUnits: total.toString(),
       totalUsd: usd(total),
@@ -382,15 +439,16 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   app.get("/earnings/creator", async (req, reply) => {
-    const user = bearer(req);
+    const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
-    const moments = Moments.createdByCreator(user.id);
+    const moments = await Moments.createdByCreator(user.id);
     let total = 0n;
-    const payouts = moments.map((m) => {
+    const payouts = [];
+    for (const m of moments) {
       const amt = m.settlement?.creatorAmountUnits ?? 0n;
       total += amt;
-      const v = momentView(m);
-      return {
+      const v = await momentView(m);
+      payouts.push({
         momentId: m.id,
         streamTitle: v.streamTitle,
         rewardUnits: amt.toString(),
@@ -399,8 +457,8 @@ export async function registerRoutes(app: FastifyInstance) {
         clip: m.clip,
         foundingCuratorCount: m.foundingCurators.length,
         confirmedAt: m.confirmedAt,
-      };
-    });
+      });
+    }
     return {
       totalUnits: total.toString(),
       totalUsd: usd(total),
@@ -415,15 +473,15 @@ export async function registerRoutes(app: FastifyInstance) {
     if (indexed?.Moment?.length) {
       // Map Envio rows onto our local Moment DTOs where we still hold them (for clip/creator UI).
       const localByOnchainId = new Map(
-        Moments.publicFeed(100).map((moment) => [momentIdHash(moment.id).toLowerCase(), moment] as const)
+        (await Moments.publicFeed(100)).map((moment) => [momentIdHash(moment.id).toLowerCase(), moment] as const)
       );
-      const moments = indexed.Moment.map((row) => {
+      const moments = await Promise.all(indexed.Moment.map(async (row) => {
         const local = localByOnchainId.get(row.id.toLowerCase());
-        return local ? momentView(local) : { id: row.id, streamId: row.streamId, category: row.category, foundingCuratorCount: row.curatorCount, settled: row.settled };
-      });
+        return local ? await momentView(local) : { id: row.id, streamId: row.streamId, category: row.category, foundingCuratorCount: row.curatorCount, settled: row.settled };
+      }));
       return { source: "envio", moments };
     }
-    return { source: "local", moments: Moments.publicFeed(30).map(momentView) };
+    return { source: "local", moments: await Promise.all((await Moments.publicFeed(30)).map(momentView)) };
   });
 
   app.get("/leaderboard", async () => {
@@ -439,8 +497,9 @@ export async function registerRoutes(app: FastifyInstance) {
       }));
       return { source: "envio", entries };
     }
-    const local = Moments.curatorLeaderboard(20).map((r, i) => {
-      const u = Users.byId(r.userId);
+    const localRows = await Moments.curatorLeaderboard(20);
+    const local = await Promise.all(localRows.map(async (r, i) => {
+      const u = await Users.byId(r.userId);
       return {
         rank: i + 1,
         userId: r.userId,
@@ -452,13 +511,13 @@ export async function registerRoutes(app: FastifyInstance) {
         firstFinds: r.firstFinds,
         momentsCurated: r.momentsCurated,
       };
-    });
+    }));
     return { source: "local", entries: local };
   });
 
   // On-chain reward history for the signed-in user (Envio; empty when not configured).
   app.get("/rewards/history", async (req, reply) => {
-    const user = bearer(req);
+    const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
     const history = await rewardHistory(user.walletAddress);
     return {
@@ -466,6 +525,74 @@ export async function registerRoutes(app: FastifyInstance) {
       curator: history?.CuratorStats?.[0] ?? null,
       creator: history?.CreatorStats?.[0] ?? null,
     };
+  });
+
+  // ---------- trust, safety, and account controls ----------
+  app.post("/reports", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const body = (req.body ?? {}) as { targetType?: ReportTarget; targetId?: string; reason?: string; details?: string };
+    if (!body.targetType || !["stream", "moment", "user"].includes(body.targetType) || !body.targetId?.trim() || !body.reason?.trim()) {
+      return reply.code(400).send({ error: "targetType, targetId, and reason are required" });
+    }
+    if (body.reason.length > 80 || (body.details?.length ?? 0) > 1000) return reply.code(400).send({ error: "report-too-long" });
+    const reportId = await Safety.report(user.id, body.targetType, body.targetId.trim(), body.reason.trim(), body.details);
+    return reply.code(201).send({ reportId, status: "open" });
+  });
+
+  app.get("/blocks", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    return { userIds: await Safety.blockedIds(user.id) };
+  });
+
+  app.post("/users/:id/block", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const { id } = req.params as { id: string };
+    if (!await Users.byId(id)) return reply.code(404).send({ error: "user-not-found" });
+    if (id === user.id) return reply.code(400).send({ error: "cannot-block-self" });
+    await Safety.block(user.id, id);
+    return { ok: true };
+  });
+
+  app.delete("/users/:id/block", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const { id } = req.params as { id: string };
+    await Safety.unblock(user.id, id);
+    return { ok: true };
+  });
+
+  app.get("/admin/reports", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    if (!user.privyId || !env.ADMIN_PRIVY_IDS.includes(user.privyId)) return reply.code(403).send({ error: "admin-only" });
+    return { reports: await Safety.openReports() };
+  });
+
+  app.post("/admin/reports/:id/resolve", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    if (!user.privyId || !env.ADMIN_PRIVY_IDS.includes(user.privyId)) return reply.code(403).send({ error: "admin-only" });
+    const { id } = req.params as { id: string };
+    const body = (req.body ?? {}) as { status?: "resolved" | "dismissed" };
+    if (body.status !== "resolved" && body.status !== "dismissed") return reply.code(400).send({ error: "invalid-status" });
+    await Safety.resolveReport(id, body.status);
+    return { ok: true };
+  });
+
+  app.delete("/me", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const body = (req.body ?? {}) as { confirmation?: string };
+    if (body.confirmation !== "DELETE") return reply.code(400).send({ error: "confirmation-required" });
+    if ((await Streams.live()).some((stream) => stream.creatorId === user.id)) {
+      return reply.code(409).send({ error: "end-live-stream-before-account-deletion" });
+    }
+    const job = await AccountDeletions.stage(user);
+    const externalDeletion = await processAccountDeletionJob(job.id);
+    return { ok: true, externalDeletion: externalDeletion ? "complete" : "pending", onchainDataRetained: true };
   });
 }
 

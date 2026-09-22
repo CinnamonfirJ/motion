@@ -31,7 +31,9 @@ export function Home() {
       <View style={{ gap: 12 }}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <Text style={{ color: color.text, ...type.h2 }}>Live now</Text>
-          <SectionIndex index={1} label="Streams" />
+          <Pressable accessibilityRole="button" onPress={() => nav.navigate("GoLive")} style={{ borderWidth: 1, borderColor: color.lime, paddingHorizontal: 10, paddingVertical: 6 }}>
+            <Text style={{ color: color.lime, ...eyebrow(11) }}>Go live</Text>
+          </Pressable>
         </View>
         {streams.length === 0 ? (
           <EmptyState title="Quiet right now." body="Fresh Moments are still waiting below." />

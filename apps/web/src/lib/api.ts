@@ -127,6 +127,58 @@ export interface SyncDTO {
   recentWindowMs: number;
 }
 
+export interface UnsignedTransactionDTO {
+  to: `0x${string}`;
+  data: `0x${string}`;
+  value: `0x${string}`;
+  chainId: number;
+}
+
+interface PendingReaction {
+  streamId: string;
+  type: string;
+  clientStreamTimeMs: number;
+  eventId: string;
+}
+
+const reactionQueueKey = "ennoia_pending_reactions_v1";
+const reactionQueue = (): PendingReaction[] => {
+  try { return JSON.parse(localStorage.getItem(reactionQueueKey) || "[]") as PendingReaction[]; } catch { return []; }
+};
+const saveReactionQueue = (queue: PendingReaction[]) => {
+  if (queue.length) localStorage.setItem(reactionQueueKey, JSON.stringify(queue.slice(-500)));
+  else localStorage.removeItem(reactionQueueKey);
+};
+const postReaction = (reaction: PendingReaction) => req<{ ok: boolean; duplicate: boolean }>("/reactions", {
+  method: "POST",
+  body: JSON.stringify({ ...reaction, platform: "web" }),
+});
+async function sendReaction(reaction: PendingReaction): Promise<{ ok: boolean; duplicate: boolean; queued?: boolean }> {
+  try {
+    return await postReaction(reaction);
+  } catch (error) {
+    if (error instanceof ApiError && error.status < 500 && error.status !== 401 && error.status !== 403) throw error;
+    const queue = reactionQueue();
+    if (!queue.some((item) => item.eventId === reaction.eventId)) queue.push(reaction);
+    saveReactionQueue(queue);
+    return { ok: true, duplicate: false, queued: true };
+  }
+}
+export async function flushReactionQueue() {
+  const remaining: PendingReaction[] = [];
+  for (const reaction of reactionQueue()) {
+    try { await postReaction(reaction); }
+    catch (error) {
+      if (error instanceof ApiError && error.status === 409) continue;
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 401 && error.status !== 403) continue;
+      remaining.push(reaction);
+    }
+  }
+  saveReactionQueue(remaining);
+}
+window.addEventListener("online", () => { void flushReactionQueue(); });
+if (navigator.onLine) void flushReactionQueue();
+
 export const api = {
   wsUrl: import.meta.env.VITE_WS_URL || "ws://localhost:4000/ws",
   login: (email: string, provider = "email", displayName?: string) =>
@@ -150,11 +202,17 @@ export const api = {
       body: "{}",
     }),
   react: (streamId: string, type: string, clientStreamTimeMs: number, eventId: string) =>
-    req<{ ok: boolean; duplicate: boolean }>("/reactions", {
-      method: "POST",
-      body: JSON.stringify({ streamId, type, clientStreamTimeMs, platform: "web", eventId }),
-    }),
-  tip: (streamId: string) => req<{ ok: boolean; onchain: boolean; amountUsd: string }>(`/streams/${streamId}/tip`, { method: "POST", body: "{}" }),
+    sendReaction({ streamId, type, clientStreamTimeMs, eventId }),
+  tip: (streamId: string, amountMon = "0.001") => req<{ transaction: UnsignedTransactionDTO; amountWei: string; amountUsd: string }>(`/streams/${streamId}/tip`, {
+    method: "POST",
+    body: JSON.stringify({ amountMon }),
+  }),
+  createStream: (title: string) => req<{ stream: StreamDTO }>("/streams", { method: "POST", body: JSON.stringify({ title }) }),
+  endStream: (streamId: string) => req<{ ok: boolean; endedAt: number }>(`/streams/${streamId}/end`, { method: "POST", body: "{}" }),
+  report: (targetType: "stream" | "moment" | "user", targetId: string, reason: string, details?: string) =>
+    req<{ reportId: string; status: string }>("/reports", { method: "POST", body: JSON.stringify({ targetType, targetId, reason, details }) }),
+  blockUser: (userId: string) => req<{ ok: boolean }>(`/users/${userId}/block`, { method: "POST", body: "{}" }),
+  deleteAccount: () => req<{ ok: boolean; onchainDataRetained: boolean }>("/me", { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE" }) }),
   clip: (streamId: string, clientStreamTimeMs: number) =>
     req<{ ok: boolean; clip: { url: string; durationSec: number } }>(`/streams/${streamId}/clip`, {
       method: "POST",

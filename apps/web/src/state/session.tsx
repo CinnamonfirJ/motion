@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { api, setToken, getToken, type UserDTO } from "../lib/api";
+import { api, flushReactionQueue, setToken, getToken, type UnsignedTransactionDTO, type UserDTO } from "../lib/api";
 import { realtime } from "../lib/realtime";
 import { registerPasskey, loginPasskey } from "../lib/passkey";
-import { useLoginWithPasskey, usePrivy, useSignupWithPasskey } from "@privy-io/react-auth";
+import { useLoginWithPasskey, usePrivy, useSendTransaction, useSignupWithPasskey, useWallets } from "@privy-io/react-auth";
 
 const PRIVY_ENABLED = Boolean(import.meta.env.VITE_PRIVY_APP_ID?.trim());
 
@@ -13,6 +13,7 @@ interface SessionCtx {
   login: (email: string, provider?: string, displayName?: string) => Promise<void>;
   signInPasskey: () => Promise<void>;
   createPasskey: (displayName: string) => Promise<void>;
+  sendTransaction: (transaction: UnsignedTransactionDTO) => Promise<string>;
   logout: () => void | Promise<void>;
 }
 
@@ -26,6 +27,7 @@ function useAppSessionState() {
     setUser(nextUser);
     realtime.connect();
     await realtime.syncClock();
+    await flushReactionQueue();
   };
   return { user, setUser, establish };
 }
@@ -71,7 +73,7 @@ function FallbackSessionProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, loading, authMode: "fallback", login, signInPasskey, createPasskey, logout }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ user, loading, authMode: "fallback", login, signInPasskey, createPasskey, sendTransaction: async () => { throw new Error("privy-wallet-required"); }, logout }}>{children}</Ctx.Provider>
   );
 }
 
@@ -81,6 +83,8 @@ function PrivySessionProvider({ children }: { children: ReactNode }) {
   const privy = usePrivy();
   const { loginWithPasskey } = useLoginWithPasskey();
   const { signupWithPasskey } = useSignupWithPasskey();
+  const { sendTransaction: sendPrivyTransaction } = useSendTransaction();
+  const { wallets } = useWallets();
   const exchangeInFlight = useRef<Promise<void> | null>(null);
   const pendingDisplayName = useRef<string | undefined>(undefined);
 
@@ -148,9 +152,16 @@ function PrivySessionProvider({ children }: { children: ReactNode }) {
     setUser(null);
     await privy.logout();
   };
+  const sendTransaction = async (transaction: UnsignedTransactionDTO) => {
+    const result = await sendPrivyTransaction(
+      { to: transaction.to, data: transaction.data, value: BigInt(transaction.value), chainId: transaction.chainId },
+      { address: wallets[0]?.address }
+    );
+    return result.hash;
+  };
 
   return (
-    <Ctx.Provider value={{ user, loading, authMode: "privy", login, signInPasskey, createPasskey, logout }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ user, loading, authMode: "privy", login, signInPasskey, createPasskey, sendTransaction, logout }}>{children}</Ctx.Provider>
   );
 }
 

@@ -18,10 +18,10 @@ class Realtime {
   connect() {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
     const token = getToken();
-    const url = `${api.wsUrl}${token ? `?token=${encodeURIComponent(token)}` : ""}`;
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(api.wsUrl);
     this.ws = ws;
     ws.onopen = () => {
+      if (token) ws.send(JSON.stringify({ type: "auth", token }));
       for (const s of this.subscribed) ws.send(JSON.stringify({ type: "subscribe", streamId: s }));
     };
     ws.onmessage = (e) => {

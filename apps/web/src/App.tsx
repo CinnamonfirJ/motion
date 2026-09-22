@@ -10,6 +10,8 @@ import { MomentDetail } from "./screens/MomentDetail";
 import { Earnings } from "./screens/Earnings";
 import { Profile } from "./screens/Profile";
 import { Demo } from "./screens/Demo";
+import { GoLive } from "./screens/GoLive";
+import { Legal } from "./screens/Legal";
 
 function OfflineBanner() {
   const [offline, setOffline] = useState(!navigator.onLine);
@@ -41,6 +43,8 @@ function Gate() {
     );
   return (
     <Routes>
+      <Route path="/privacy" element={<Legal kind="privacy" />} />
+      <Route path="/terms" element={<Legal kind="terms" />} />
       {/* Hidden demo panel — reachable by URL only, no login required (for judging). */}
       <Route path="/demo" element={<Demo />} />
       {user ? (
@@ -52,6 +56,7 @@ function Gate() {
             <Route path="/moments/:id" element={<MomentDetail />} />
             <Route path="/earnings" element={<Earnings />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/go-live" element={<GoLive />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </>

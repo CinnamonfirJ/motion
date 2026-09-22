@@ -125,6 +125,10 @@ export function MomentDetail() {
             </Button>
           </Link>
         )}
+        <div className="flex justify-center gap-5 pb-3 text-bodysm text-text-muted">
+          <button onClick={() => { if (window.confirm("Report this Moment for moderator review?")) void api.report("moment", moment.id, "inappropriate-content"); }}>Report</button>
+          {moment.creator && <button onClick={() => { if (window.confirm("Block this creator and hide their content from your feeds?")) void api.blockUser(moment.creator!.id).then(() => nav("/")); }}>Block creator</button>}
+        </div>
       </div>
     </div>
   );

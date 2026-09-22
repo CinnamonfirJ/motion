@@ -16,6 +16,7 @@ import {
   RewardToast,
   type ReactionType,
 } from "../components/live";
+import { useSession } from "../state/session";
 
 export function Live() {
   const { id = "" } = useParams();
@@ -30,6 +31,8 @@ export function Live() {
   const [celebration, setCelebration] = useState<{ rank: number; rewardUsd: string; momentId: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [wave, setWave] = useState<number[]>([]);
+  const { sendTransaction } = useSession();
+  const { user } = useSession();
 
   // Load stream + clock sync.
   useEffect(() => {
@@ -137,6 +140,14 @@ export function Live() {
           </div>
           <LivePill count={viewerCount} />
         </div>
+        {stream.creator?.id === user?.id && (
+          <button
+            className="absolute right-4 top-20 bg-error px-3 py-2 font-mono text-micro uppercase tracking-[0.1em] text-white"
+            onClick={async () => { await api.endStream(id); nav("/"); }}
+          >
+            End live
+          </button>
+        )}
 
         {/* forming pill */}
         {forming && !detecting && (
@@ -158,6 +169,7 @@ export function Live() {
             onClick={async () => {
               try {
                 const r = await api.tip(id);
+                await sendTransaction(r.transaction);
                 setToast(`Tip sent · ${r.amountUsd}`);
               } catch {
                 setToast("Your tip needs a moment — still going through.");
