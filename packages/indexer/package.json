@@ -1,0 +1,16 @@
+{
+  "name": "@ennoia/indexer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Envio HyperIndex for ENNOIA on Monad — indexes MomentRewards events, Founding Curators, tips, settlements and payouts for feeds, leaderboards and reward history.",
+  "type": "module",
+  "scripts": {
+    "codegen": "envio codegen",
+    "dev": "envio dev",
+    "start": "envio start",
+    "stop": "envio stop"
+  },
+  "devDependencies": {
+    "envio": "^2.11.0"
+  }
+}

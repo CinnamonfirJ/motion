@@ -1,5 +1,5 @@
 /**
- * MOMENT Step 4 logic — unique-reactor spike detection, watch-time eligibility, weighted
+ * ENNOIA Step 4 logic — unique-reactor spike detection, watch-time eligibility, weighted
  * Founding-Curator scoring, reaction category and per-second histogram.
  *
  * Pure + deterministic; imported by the backend engine and (read-only) by clients. All

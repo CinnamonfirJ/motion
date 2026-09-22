@@ -1,11 +1,11 @@
-// Typed REST client for the Moment backend.
+// Typed REST client for the ENNOIA backend.
 const API = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
-let token: string | null = localStorage.getItem("moment_token");
+let token: string | null = localStorage.getItem("ennoia_token");
 export function setToken(t: string | null) {
   token = t;
-  if (t) localStorage.setItem("moment_token", t);
-  else localStorage.removeItem("moment_token");
+  if (t) localStorage.setItem("ennoia_token", t);
+  else localStorage.removeItem("ennoia_token");
 }
 export function getToken() {
   return token;
@@ -57,6 +57,8 @@ export interface StreamDTO {
   startedAt: number;
   isLive: boolean;
   viewerCount: number;
+  mode: "livekit" | "vod";
+  livekitRoom: string | null;
   creator: CreatorMini | null;
 }
 export interface ClipDTO {
@@ -112,6 +114,8 @@ export interface MomentDTO {
   foundingCurators: CuratorDTO[];
   foundingCuratorCount: number;
   settlement: SettlementDTO | null;
+  onchainMomentId: string;
+  livekitRoom: string | null;
   createdAt: number;
 }
 export interface SyncDTO {
@@ -130,11 +134,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ email, provider, displayName }),
     }),
+  privy: (accessToken: string, displayName?: string) =>
+    req<{ token: string; user: UserDTO }>("/auth/privy", {
+      method: "POST",
+      body: JSON.stringify({ accessToken, displayName }),
+    }),
   me: () => req<{ user: UserDTO; wallet: { address: string; network: string; onchain: boolean } }>("/me"),
   streams: () => req<{ streams: StreamDTO[] }>("/streams"),
   stream: (id: string) =>
     req<{ stream: StreamDTO; sync: SyncDTO; activeMoments: MomentDTO[]; recentReactionCount: number }>(`/streams/${id}`),
   sync: (id: string) => req<SyncDTO>(`/streams/${id}/sync`),
+  livekitToken: (id: string) =>
+    req<{ url: string; token: string; room: string; role: "host" | "viewer" }>(`/streams/${id}/livekit-token`, {
+      method: "POST",
+      body: "{}",
+    }),
   react: (streamId: string, type: string, clientStreamTimeMs: number, eventId: string) =>
     req<{ ok: boolean; duplicate: boolean }>("/reactions", {
       method: "POST",

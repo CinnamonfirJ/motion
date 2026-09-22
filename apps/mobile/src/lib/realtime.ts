@@ -1,5 +1,5 @@
 import { api, WS_URL, getToken } from "./api";
-import { computeClockOffset, serverNow } from "@moment/core";
+import { computeClockOffset, serverNow } from "@ennoia/core";
 
 /** WebSocket + authoritative clock (mirrors web). RN provides a global WebSocket. */
 type Handler = (ev: any) => void;

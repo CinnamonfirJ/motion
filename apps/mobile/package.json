@@ -1,5 +1,5 @@
 {
-  "name": "@moment/mobile",
+  "name": "@ennoia/mobile",
   "version": "0.1.0",
   "private": true,
   "main": "index.ts",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@moment/core": "workspace:*",
+    "@ennoia/core": "workspace:*",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.2.0",
     "@react-navigation/native": "^7.0.14",

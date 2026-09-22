@@ -4,7 +4,7 @@ import {
   type MomentConfig,
   type Settlement,
   type FoundingCurator,
-} from "@moment/core";
+} from "@ennoia/core";
 import { getChain, momentIdHash } from "./chain.js";
 import { env } from "./env.js";
 import { ethers } from "ethers";
@@ -18,7 +18,7 @@ export interface SettlementOutcome {
 /**
  * Settle a confirmed Moment (PRD §19, §20, §28, §35, §42).
  *
- * - Computes the reward split with @moment/core (single source of truth).
+ * - Computes the reward split with @ennoia/core (single source of truth).
  * - Sends a REAL Monad transaction via MomentRewards.settleMoment when the chain is
  *   configured. The contract enforces one-settlement-per-Moment, so this is safe to retry.
  * - If the same Moment is already settled on-chain, we reconcile instead of double paying.

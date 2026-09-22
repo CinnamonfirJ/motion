@@ -1,5 +1,5 @@
 import { api, getToken } from "./api";
-import { computeClockOffset, serverNow } from "@moment/core";
+import { computeClockOffset, serverNow } from "@ennoia/core";
 
 /**
  * Single WebSocket connection + authoritative clock offset (PRD §8/§33/§40).

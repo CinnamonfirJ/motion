@@ -2,7 +2,7 @@ import { deriveWallet, normalizeAuthId } from "./auth.js";
 import { Users, Streams } from "./store.js";
 import { ingestReaction } from "./momentEngine.js";
 import { seedWatch } from "./watch.js";
-import { newEventId, type ReactionType, type Platform, type User } from "@moment/core";
+import { newEventId, type ReactionType, type Platform, type User } from "@ennoia/core";
 
 /**
  * Demo data + participant simulation (PRD §40). Kept fully isolated from product logic:
@@ -102,7 +102,7 @@ export function seedIfEmpty(): void {
 
   bots = [];
   for (let i = 0; i < BOT_COUNT; i++) {
-    const authId = normalizeAuthId("seed", `bot${i}@moment.demo`);
+    const authId = normalizeAuthId("seed", `bot${i}@ennoia.demo`);
     const wallet = deriveWallet(authId);
     bots.push(
       Users.create({
@@ -147,7 +147,7 @@ export function demoResetStream(streamId: string): void {
 function loadBots(): User[] {
   const out: User[] = [];
   for (let i = 0; i < BOT_COUNT; i++) {
-    const u = Users.byAuthId(normalizeAuthId("seed", `bot${i}@moment.demo`));
+    const u = Users.byAuthId(normalizeAuthId("seed", `bot${i}@ennoia.demo`));
     if (u) out.push(u);
   }
   return out;

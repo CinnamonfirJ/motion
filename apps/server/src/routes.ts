@@ -1,23 +1,29 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { streamPositionSec, type Platform, type ReactionType, type User } from "@moment/core";
+import { streamPositionSec, type Platform, type ReactionType, type User } from "@ennoia/core";
 import { Users, Streams, Moments, Reactions } from "./store.js";
 import { deriveWallet, issueToken, verifyToken, normalizeAuthId } from "./auth.js";
 import { issueChallenge, verifyClientData, Passkeys } from "./passkey.js";
-import { env } from "./env.js";
+import { env, privyConfigured, livekitConfigured, envioConfigured } from "./env.js";
+import { verifyPrivyToken } from "./privy.js";
+import { roomTokenFor } from "./livekit.js";
+import { topCurators, trendingMoments, rewardHistory } from "./envio.js";
 import { randomBytes } from "node:crypto";
 import { ingestReaction, config, tipStream, demoFastForwardSettlement } from "./momentEngine.js";
 import { demoCrowd, demoForceSpike, demoResetStream } from "./seed.js";
 import { hub } from "./realtime.js";
 import { momentView, streamView, userView, usd } from "./view.js";
-import { getChain } from "./chain.js";
-import { streamTimeMs } from "@moment/core";
+import { getChain, momentIdHash } from "./chain.js";
+import { streamTimeMs } from "@ennoia/core";
 
 function bearer(req: FastifyRequest): User | null {
   const h = req.headers.authorization;
   if (!h?.startsWith("Bearer ")) return null;
   const claims = verifyToken(h.slice(7));
   if (!claims) return null;
-  return Users.byId(claims.userId);
+  const user = Users.byId(claims.userId);
+  // Once Privy is configured, legacy fallback identities must not authorize protected actions.
+  if (privyConfigured() && !user?.privyId) return null;
+  return user;
 }
 
 function handleFromName(name: string): string {
@@ -30,8 +36,61 @@ export async function registerRoutes(app: FastifyInstance) {
 
   app.get("/time", async () => ({ serverTime: Date.now() }));
 
+  // Feature discovery: clients use this to choose Privy vs fallback auth, LiveKit vs VOD, etc.
+  app.get("/config", async () => ({
+    auth: privyConfigured() ? "privy" : "fallback",
+    livestream: livekitConfigured() ? "livekit" : "vod",
+    analytics: envioConfigured() ? "envio" : "local",
+    chain: getChain().enabled ? "onchain" : "simulation",
+    monadChainId: env.MONAD_CHAIN_ID,
+  }));
+
   // ---------- auth ----------
+  // Privy sign-in (source of truth when configured): verify the Privy access token, upsert the
+  // user with their embedded wallet, then mint our own app session token. Passkey-first happens
+  // entirely on the client via the Privy SDK; the server just verifies the result.
+  app.post("/auth/privy", async (req, reply) => {
+    if (!privyConfigured()) return reply.code(400).send({ error: "privy-not-configured" });
+    const body = (req.body ?? {}) as { accessToken?: string; displayName?: string };
+    if (!body.accessToken) return reply.code(400).send({ error: "accessToken required" });
+
+    let identity;
+    try {
+      identity = await verifyPrivyToken(body.accessToken);
+    } catch (e) {
+      req.log.warn({ e }, "privy verify failed");
+      return reply.code(401).send({ error: "invalid-privy-token" });
+    }
+    if (!identity.walletAddress) return reply.code(400).send({ error: "no-embedded-wallet" });
+
+    let user = Users.byPrivyId(identity.privyId);
+    if (!user) {
+      const displayName = body.displayName?.trim() || identity.displayName || "Scout";
+      try {
+        user = Users.create({
+          authId: `privy:${identity.privyId}`,
+          privyId: identity.privyId,
+          displayName,
+          handle: handleFromName(displayName),
+          avatarUrl: null,
+          walletAddress: identity.walletAddress,
+          isCreator: false,
+        });
+      } catch (error) {
+        // Two clients can exchange the same freshly-created Privy identity concurrently.
+        user = Users.byPrivyId(identity.privyId);
+        if (!user) throw error;
+      }
+    } else if (user.walletAddress !== identity.walletAddress) {
+      // Keep the embedded wallet in sync if Privy rotated/added it.
+      Users.linkPrivy(user.id, identity.privyId, identity.walletAddress);
+      user = Users.byId(user.id)!;
+    }
+    return { token: issueToken(user.id), user: userView(user) };
+  });
+
   app.post("/auth/login", async (req, reply) => {
+    if (privyConfigured()) return reply.code(404).send({ error: "fallback-auth-disabled" });
     const body = (req.body ?? {}) as { provider?: string; email?: string; subject?: string; displayName?: string };
     const provider = body.provider ?? "email";
     const subject = body.email ?? body.subject;
@@ -57,14 +116,15 @@ export async function registerRoutes(app: FastifyInstance) {
   // ---------- passkey (WebAuthn) sign-in — biometric, embedded wallet, no seed phrase ----------
   const b64urlStr = (buf: Buffer) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-  app.post("/auth/passkey/register-options", async (req) => {
+  app.post("/auth/passkey/register-options", async (req, reply) => {
+    if (privyConfigured()) return reply.code(404).send({ error: "fallback-auth-disabled" });
     const body = (req.body ?? {}) as { displayName?: string };
     const displayName = body.displayName?.trim() || "Scout";
     const userHandle = b64urlStr(randomBytes(16));
     return {
       challenge: issueChallenge(),
       rp: { id: env.RP_ID, name: env.RP_NAME },
-      user: { id: userHandle, name: `${displayName.toLowerCase().replace(/\s+/g, "")}@moment`, displayName },
+      user: { id: userHandle, name: `${displayName.toLowerCase().replace(/\s+/g, "")}@ennoia`, displayName },
       pubKeyCredParams: [
         { type: "public-key", alg: -7 },
         { type: "public-key", alg: -257 },
@@ -77,6 +137,7 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/auth/passkey/register", async (req, reply) => {
+    if (privyConfigured()) return reply.code(404).send({ error: "fallback-auth-disabled" });
     const body = (req.body ?? {}) as { credentialId?: string; clientDataJSON?: string; displayName?: string };
     if (!body.credentialId || !body.clientDataJSON) return reply.code(400).send({ error: "missing fields" });
     const v = verifyClientData(body.clientDataJSON, "webauthn.create", env.RP_ORIGINS);
@@ -100,15 +161,19 @@ export async function registerRoutes(app: FastifyInstance) {
     return { token: issueToken(user.id), user: userView(user) };
   });
 
-  app.post("/auth/passkey/login-options", async () => ({
-    challenge: issueChallenge(),
-    rpId: env.RP_ID,
-    userVerification: "required",
-    allowCredentials: [], // discoverable credentials — browser shows the passkey picker
-    timeout: 60_000,
-  }));
+  app.post("/auth/passkey/login-options", async (_req, reply) => {
+    if (privyConfigured()) return reply.code(404).send({ error: "fallback-auth-disabled" });
+    return {
+      challenge: issueChallenge(),
+      rpId: env.RP_ID,
+      userVerification: "required",
+      allowCredentials: [], // discoverable credentials — browser shows the passkey picker
+      timeout: 60_000,
+    };
+  });
 
   app.post("/auth/passkey/login", async (req, reply) => {
+    if (privyConfigured()) return reply.code(404).send({ error: "fallback-auth-disabled" });
     const body = (req.body ?? {}) as { credentialId?: string; clientDataJSON?: string };
     if (!body.credentialId || !body.clientDataJSON) return reply.code(400).send({ error: "missing fields" });
     const v = verifyClientData(body.clientDataJSON, "webauthn.get", env.RP_ORIGINS);
@@ -161,6 +226,43 @@ export async function registerRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const active = Moments.activeForStream(id);
     return { active: active.map(momentView) };
+  });
+
+  // ---------- livestream (LiveKit) ----------
+  // Go live: create/relaunch a stream owned by the caller. Room = stream id. When LiveKit is
+  // configured the caller publishes into a real room; otherwise the stream carries a VOD url.
+  app.post("/streams", async (req, reply) => {
+    const user = bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const body = (req.body ?? {}) as { title?: string; videoUrl?: string; durationSec?: number; thumbnailUrl?: string };
+    const now = Date.now();
+    const id = `stream_${user.handle}_${Math.floor(now / 1000)}`;
+    const stream = Streams.upsert({
+      id,
+      creatorId: user.id,
+      title: body.title?.trim() || `${user.displayName} live`,
+      // VOD fallback source; ignored by clients when the stream renders as a LiveKit room.
+      videoUrl: body.videoUrl ?? "",
+      durationSec: Number(body.durationSec ?? 0),
+      thumbnailUrl: body.thumbnailUrl ?? null,
+      startedAt: now,
+      isLive: true,
+      createdAt: now,
+    });
+    return { stream: streamView(stream, 0) };
+  });
+
+  // Mint a LiveKit room token. Host grant only for the stream's creator; everyone else viewer.
+  app.post("/streams/:id/livekit-token", async (req, reply) => {
+    const user = bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    if (!livekitConfigured()) return reply.code(400).send({ error: "livekit-not-configured" });
+    const { id } = req.params as { id: string };
+    const stream = Streams.byId(id);
+    if (!stream) return reply.code(404).send({ error: "not found" });
+    const role = stream.creatorId === user.id ? "host" : "viewer";
+    const t = await roomTokenFor(user, id, role);
+    return { url: t.url, token: t.token, room: t.room, role: t.role };
   });
 
   // ---------- reactions ----------
@@ -304,6 +406,65 @@ export async function registerRoutes(app: FastifyInstance) {
       totalUsd: usd(total),
       momentsGenerated: moments.length,
       payouts,
+    };
+  });
+
+  // ---------- feeds & leaderboards (Envio-indexed onchain activity; local fallback) ----------
+  app.get("/feeds/trending", async () => {
+    const indexed = await trendingMoments(30);
+    if (indexed?.Moment?.length) {
+      // Map Envio rows onto our local Moment DTOs where we still hold them (for clip/creator UI).
+      const localByOnchainId = new Map(
+        Moments.publicFeed(100).map((moment) => [momentIdHash(moment.id).toLowerCase(), moment] as const)
+      );
+      const moments = indexed.Moment.map((row) => {
+        const local = localByOnchainId.get(row.id.toLowerCase());
+        return local ? momentView(local) : { id: row.id, streamId: row.streamId, category: row.category, foundingCuratorCount: row.curatorCount, settled: row.settled };
+      });
+      return { source: "envio", moments };
+    }
+    return { source: "local", moments: Moments.publicFeed(30).map(momentView) };
+  });
+
+  app.get("/leaderboard", async () => {
+    const indexed = await topCurators(20);
+    if (indexed?.CuratorStats?.length) {
+      const entries = indexed.CuratorStats.map((c, i) => ({
+        rank: i + 1,
+        walletAddress: c.id,
+        totalUnits: c.totalRewards,
+        totalUsd: usd(BigInt(c.totalRewards || "0")),
+        firstFinds: c.firstFinds,
+        momentsCurated: c.momentsCurated,
+      }));
+      return { source: "envio", entries };
+    }
+    const local = Moments.curatorLeaderboard(20).map((r, i) => {
+      const u = Users.byId(r.userId);
+      return {
+        rank: i + 1,
+        userId: r.userId,
+        displayName: u?.displayName ?? "Scout",
+        handle: u?.handle ?? null,
+        walletAddress: u?.walletAddress ?? null,
+        totalUnits: r.totalUnits.toString(),
+        totalUsd: usd(r.totalUnits),
+        firstFinds: r.firstFinds,
+        momentsCurated: r.momentsCurated,
+      };
+    });
+    return { source: "local", entries: local };
+  });
+
+  // On-chain reward history for the signed-in user (Envio; empty when not configured).
+  app.get("/rewards/history", async (req, reply) => {
+    const user = bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const history = await rewardHistory(user.walletAddress);
+    return {
+      source: history ? "envio" : "local",
+      curator: history?.CuratorStats?.[0] ?? null,
+      creator: history?.CreatorStats?.[0] ?? null,
     };
   });
 }

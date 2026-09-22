@@ -1,0 +1,96 @@
+# Envio entities. Each is queryable via the generated GraphQL API and consumed by the server
+# (apps/server/src/envio.ts) for trending feeds, leaderboards and reward history.
+#
+# IDs: Moment/Settlement keyed by the on-chain momentId hash; per-wallet stats keyed by the
+# lowercased address; per-event rows keyed by "<txHash>-<logIndex>".
+
+type Moment {
+  id: ID! # momentId (bytes32 hash)
+  streamId: String!
+  creator: String!
+  clipStart: BigInt!
+  clipEnd: BigInt!
+  category: Int!
+  curatorCount: Int!
+  settled: Boolean!
+  totalPaid: BigInt!
+  createdAtBlock: Int!
+  settledAtBlock: Int
+}
+
+type FoundingCurator {
+  id: ID! # momentId-curator
+  moment: String!
+  curator: String!
+  rank: Int!
+}
+
+type Tip {
+  id: ID! # txHash-logIndex
+  streamId: String!
+  from: String!
+  amount: BigInt!
+  streamTotal: BigInt!
+  blockNumber: Int!
+}
+
+type Settlement {
+  id: ID! # momentId
+  creator: String!
+  creatorAmount: BigInt!
+  curatorPool: BigInt!
+  platformAmount: BigInt!
+  total: BigInt!
+  curatorCount: Int!
+  blockNumber: Int!
+}
+
+type CuratorPayout {
+  id: ID! # momentId-curator
+  moment: String!
+  curator: String!
+  rank: Int!
+  amount: BigInt!
+  blockNumber: Int!
+}
+
+type PlatformPayout {
+  id: ID! # momentId-platform
+  moment: String!
+  platform: String!
+  amount: BigInt!
+  blockNumber: Int!
+}
+
+type ReactionBatch {
+  id: ID! # batchId
+  streamId: String!
+  reactionCount: BigInt!
+  fromTs: BigInt!
+  toTs: BigInt!
+  commitment: String!
+  blockNumber: Int!
+}
+
+# ---- rolling per-wallet / per-stream aggregates (leaderboards, analytics) ----
+type CuratorStats {
+  id: ID! # lowercased wallet address
+  totalRewards: BigInt!
+  firstFinds: Int!
+  momentsCurated: Int!
+}
+
+type CreatorStats {
+  id: ID! # lowercased wallet address
+  totalRewards: BigInt!
+  momentsGenerated: Int!
+  totalTips: BigInt!
+}
+
+type StreamStats {
+  id: ID! # streamId (bytes32)
+  creator: String
+  tipTotal: BigInt!
+  momentCount: Int!
+  reactionCount: BigInt!
+}

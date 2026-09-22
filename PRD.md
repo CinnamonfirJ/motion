@@ -2,7 +2,7 @@
 
 ## Working title
 
-**Moment**  
+**ENNOIA**
 Final product name TBD.
 
 ## Product category
@@ -15,7 +15,7 @@ Monad Metropolis, Track 3: Social, Attention & Culture
 
 ## Platforms
 
-Moment launches simultaneously as:
+ENNOIA launches simultaneously as:
 
 - Responsive web application
 - iOS application
@@ -35,7 +35,7 @@ Hackathon MVP
 
 # 1. Product Summary
 
-Moment turns real-time audience reactions into a new form of **paid curation**.
+ENNOIA turns real-time audience reactions into a new form of **paid curation**.
 
 Viewers watch live streams and react normally. When reactions suddenly spike around a particular part of a stream, Moment identifies that section as potentially interesting.
 
@@ -66,7 +66,7 @@ They are helping discover valuable content early and can be rewarded for being r
 
 Existing livestream platforms treat reactions as disposable engagement.
 
-Moment treats reactions as **curation signals**.
+ENNOIA treats reactions as **curation signals**.
 
 The central product hypothesis is:
 
@@ -118,7 +118,7 @@ Their reactions help establish that something is interesting, but they receive n
 
 # 4. Product Opportunity
 
-Moment creates a marketplace around **attention discovery** rather than attention ownership.
+ENNOIA creates a marketplace around **attention discovery** rather than attention ownership.
 
 The important behavior is not:
 
@@ -130,7 +130,7 @@ It is:
 
 Traditional engagement rewards popularity after it exists.
 
-Moment rewards users who contribute to identifying popularity while it is forming.
+ENNOIA rewards users who contribute to identifying popularity while it is forming.
 
 ---
 
@@ -194,7 +194,7 @@ A full creator studio is unnecessary.
 
 # 5.3 Tertiary Persona: Cold-Open Viewer
 
-A person opening Moment without already knowing which creator they want to watch.
+A person opening ENNOIA without already knowing which creator they want to watch.
 
 ### Motivation
 
@@ -260,7 +260,7 @@ Blockchain complexity belongs underneath the interface.
 
 ## 7.4 Cross-platform from day one
 
-Moment is not a web prototype with mobile postponed.
+ENNOIA is not a web prototype with mobile postponed.
 
 Web, iOS and Android are all first-class launch clients.
 
@@ -284,7 +284,7 @@ Fake-live video and seeded engagement may be used to make the demo reliable, but
 
 # 8. Platform Strategy
 
-Moment launches on three surfaces simultaneously.
+ENNOIA launches on three surfaces simultaneously.
 
 ## 8.1 Web
 
@@ -629,7 +629,7 @@ A raw threshold disadvantages small creators.
 
 Twenty reactions might be insignificant for a giant streamer and extraordinary for someone with seven viewers.
 
-Moment should therefore measure unusual attention relative to the stream's own normal activity.
+ENNOIA should therefore measure unusual attention relative to the stream's own normal activity.
 
 This makes the system useful for discovering emerging creators rather than merely rediscovering already-popular creators.
 
@@ -1139,7 +1139,7 @@ No AI required.
 
 ## Shareable Moment URLs
 
-Moment Cards should be shareable outside Moment.
+Moment Cards should be shareable outside ENNOIA.
 
 ---
 
@@ -2033,7 +2033,7 @@ Reliable Monad settlement passes.
 
 # 51. MVP Definition of Done
 
-Moment is ready for submission and launch when a fresh user can:
+ENNOIA is ready for submission and launch when a fresh user can:
 
 1. download the iOS app, download the Android app, or open the web app;
 2. sign in without seeing crypto complexity;

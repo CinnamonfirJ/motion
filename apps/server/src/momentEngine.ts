@@ -9,7 +9,7 @@ import {
   formatUsd,
   newId,
   newEventId,
-  // MOMENT Step 4 logic
+  // ENNOIA Step 4 logic
   evaluateUniqueSpike,
   scoreFoundingCurators,
   categoryFromMix,
@@ -31,8 +31,8 @@ import {
   type CandidateReactor,
   type Clip,
   REACTION_TYPES,
-} from "@moment/core";
-import { assertTransition } from "@moment/core";
+} from "@ennoia/core";
+import { assertTransition } from "@ennoia/core";
 import { Streams, Reactions, Moments, Users, Batches } from "./store.js";
 import { hub } from "./realtime.js";
 import { settleMoment } from "./settlement.js";
@@ -65,7 +65,7 @@ export function ingestReaction(user: User, input: ReactionInput): IngestResult {
   const now = Date.now();
   const streamTime = reconcileStreamTime(input.clientStreamTimeMs, stream.startedAt, now);
 
-  // Watch-time eligibility: record first-seen, then read accrued watch time (MOMENT anti-cheat).
+  // Watch-time eligibility: record first-seen, then read accrued watch time (ENNOIA anti-cheat).
   noteWatch(stream.id, user.id, now);
   const watchTimeMs = getWatchMs(stream.id, user.id, now);
 
@@ -123,7 +123,7 @@ function broadcastActivity(streamId: string, now: number) {
   hub.broadcastStream(streamId, { t: "activity", streamId, ratePerSec, recentByType, heatingUp });
 }
 
-// ---------- detection (MOMENT unique-reactor spike) ----------
+// ---------- detection (ENNOIA unique-reactor spike) ----------
 function detect(streamId: string, now: number) {
   const stream = Streams.byId(streamId);
   if (!stream || !stream.isLive) return;

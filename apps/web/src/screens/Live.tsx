@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { streamPositionSec, streamTimeMs, newEventId } from "@moment/core";
+import { streamPositionSec, streamTimeMs, newEventId } from "@ennoia/core";
 import { api, type StreamDTO, type SyncDTO } from "../lib/api";
 import { realtime } from "../lib/realtime";
 import { Avatar, LivePill } from "../components/ui";
 import { LivePlayer } from "../components/players";
+import { LiveKitStage } from "../components/LiveKitStage";
 import {
   ReactionRail,
   LivePulse,
@@ -117,7 +118,11 @@ export function Live() {
     <div data-theme="dark" className="min-h-screen bg-night text-text flex flex-col">
       {/* video region (~65-72% on mobile) */}
       <div className="relative w-full bg-black" style={{ height: "min(72vh, 720px)" }}>
-        <LivePlayer src={stream.videoUrl} getPositionSec={positionSec} muted={muted} onToggleMute={() => setMuted((m) => !m)} />
+        {stream.mode === "livekit" ? (
+          <LiveKitStage streamId={stream.id} />
+        ) : (
+          <LivePlayer src={stream.videoUrl} getPositionSec={positionSec} muted={muted} onToggleMute={() => setMuted((m) => !m)} />
+        )}
 
         {/* top overlays */}
         <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4" style={{ paddingTop: "max(16px, env(safe-area-inset-top))" }}>
@@ -155,7 +160,7 @@ export function Live() {
                 const r = await api.tip(id);
                 setToast(`Tip sent · ${r.amountUsd}`);
               } catch {
-                setToast("Tip is taking longer than expected.");
+                setToast("Your tip needs a moment — still going through.");
               }
             }}
             className="inline-flex items-center gap-1.5 border border-border bg-surface2 px-3 py-1.5 font-mono text-micro uppercase tracking-[0.1em] text-text-secondary hover:text-text"
@@ -170,7 +175,7 @@ export function Live() {
                 await api.clip(id, at);
                 setToast("Clip saved to your finds");
               } catch {
-                setToast("Clip is still processing.");
+                setToast("Your clip's coming together — one moment.");
               }
             }}
             className="inline-flex items-center gap-1.5 border border-border bg-surface2 px-3 py-1.5 font-mono text-micro uppercase tracking-[0.1em] text-text-secondary hover:text-text"

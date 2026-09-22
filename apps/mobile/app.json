@@ -1,23 +1,30 @@
 {
   "expo": {
-    "name": "Moment",
-    "slug": "moment",
-    "scheme": "moment",
+    "name": "ENNOIA",
+    "owner": "jessecinnamonfir",
+    "slug": "ennoia",
+    "scheme": "ennoia",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#070708",
+    "backgroundColor": "#FEFEFE",
+    "icon": "./assets/icon.png",
     "splash": {
-      "backgroundColor": "#070708",
+      "image": "./assets/splash.png",
+      "backgroundColor": "#FEFEFE",
       "resizeMode": "contain"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.moment.demo"
+      "bundleIdentifier": "com.ennoia.app"
     },
     "android": {
-      "package": "app.moment.demo",
+      "package": "com.ennoia.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FEFEFE"
+      },
       "edgeToEdgeEnabled": true
     },
     "web": {

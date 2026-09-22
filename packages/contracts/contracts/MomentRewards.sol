@@ -33,7 +33,7 @@ contract MomentRewards {
     /// @notice momentId => created on-chain (Founding Curators recorded at creation).
     mapping(bytes32 => bool) public momentCreated;
     mapping(bytes32 => address) public momentCreatorOf;
-    /// @notice streamId => accumulated tips (funds the Moment reward pool). MOMENT tip().
+    /// @notice streamId => accumulated tips (funds the Moment reward pool). ENNOIA tip().
     mapping(bytes32 => uint256) public streamTips;
     uint256 public totalTips;
 
@@ -59,7 +59,7 @@ contract MomentRewards {
     );
     event FoundingCuratorRecorded(bytes32 indexed momentId, address indexed curator, uint8 rank);
 
-    /// @notice Tips fund the Moment reward pool. MOMENT tip(streamId).
+    /// @notice Tips fund the Moment reward pool. ENNOIA tip(streamId).
     event Tipped(bytes32 indexed streamId, address indexed from, uint256 amount, uint256 streamTotal);
 
     event MomentSettled(
@@ -154,7 +154,7 @@ contract MomentRewards {
         emit ReactionBatchCommitted(batchId, streamId, reactionCount, fromTs, toTs, commitment);
     }
 
-    // --- tips (MOMENT) ---
+    // --- tips (ENNOIA) ---
     /// @notice Tip a stream. Tips fund the Moment reward pool. Anyone may tip.
     function tip(bytes32 streamId) external payable {
         if (msg.value == 0) revert ZeroAmount();
@@ -190,7 +190,7 @@ contract MomentRewards {
         emit MomentCreated(momentId, streamId, creator, clipStart, clipEnd, category, curators.length);
     }
 
-    // --- settlement (idempotent; MOMENT 3-way split creator / curators / platform) ---
+    // --- settlement (idempotent; ENNOIA 3-way split creator / curators / platform) ---
     /**
      * @param momentId       keccak256 of the Moment id string.
      * @param creator        creator payout recipient.

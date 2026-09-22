@@ -5,7 +5,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Neutrals + accent text (`leaf`) come from CSS variables (MOMENT black+purple).
+        // Neutrals + accent text (`leaf`) come from CSS variables (ENNOIA black+purple).
         night: "var(--c-night)",
         surface1: "var(--c-surface1)",
         surface2: "var(--c-surface2)",
@@ -18,7 +18,7 @@ export default {
           muted: "var(--c-text-muted)",
           disabled: "var(--c-text-disabled)",
         },
-        // MOMENT brand purple. These accents are theme-independent (fixed hex) so Tailwind's
+        // ENNOIA brand purple. These accents are theme-independent (fixed hex) so Tailwind's
         // /opacity modifiers (bg-lime/10, border-error/40, …) render correctly.
         brand: "#5028DC", // --color-9 — primary buttons (white text)
         brandHover: "#7850C8", // --color-13

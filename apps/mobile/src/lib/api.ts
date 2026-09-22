@@ -6,13 +6,13 @@ export const WS_URL = process.env.EXPO_PUBLIC_WS_URL || "ws://localhost:4000/ws"
 
 let token: string | null = null;
 export async function loadToken() {
-  token = await AsyncStorage.getItem("moment_token");
+  token = await AsyncStorage.getItem("ennoia_token");
   return token;
 }
 export async function setToken(t: string | null) {
   token = t;
-  if (t) await AsyncStorage.setItem("moment_token", t);
-  else await AsyncStorage.removeItem("moment_token");
+  if (t) await AsyncStorage.setItem("ennoia_token", t);
+  else await AsyncStorage.removeItem("ennoia_token");
 }
 export function getToken() {
   return token;
@@ -48,6 +48,8 @@ export interface StreamDTO {
   startedAt: number;
   isLive: boolean;
   viewerCount: number;
+  mode: "livekit" | "vod";
+  livekitRoom: string | null;
   creator: { id: string; displayName: string; handle: string; avatarUrl: string | null } | null;
 }
 export interface MomentDTO {

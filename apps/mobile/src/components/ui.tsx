@@ -28,7 +28,7 @@ export function Button({
   disabled?: boolean;
   right?: ReactNode;
 }) {
-  // MOMENT primary: brand purple with white text (accessible on the bright brand).
+  // ENNOIA primary: brand purple with white text (accessible on the bright brand).
   const bg = variant === "primary" ? color.brand : "transparent";
   const fg = variant === "primary" ? "#FFFFFF" : color.text;
   return (
@@ -135,7 +135,7 @@ export function ReactionGraph({ durationSec, peakOffsetSec, total, live }: { dur
   });
   const max = Math.max(...bars);
   const peakIdx = Math.round((Math.min(dur, peakOffsetSec) / dur) * (N - 1));
-  const accent = color.electric; // MOMENT: graphs / spike line use --color-4
+  const accent = color.electric; // ENNOIA: graphs / spike line use --color-4
   return (
     <View accessible accessibilityLabel={`Reaction activity peaked ${Math.round(peakOffsetSec)} seconds in, from ${total} reactions.`}>
       <View style={{ flexDirection: "row", alignItems: "flex-end", height: 72, gap: 3 }}>

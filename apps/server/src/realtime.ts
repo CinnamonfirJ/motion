@@ -1,4 +1,4 @@
-import type { ReactionType } from "@moment/core";
+import type { ReactionType } from "@ennoia/core";
 
 /** Minimal structural type for a ws WebSocket (avoids depending on @types/ws). */
 export interface SocketLike {

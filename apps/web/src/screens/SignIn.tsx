@@ -10,8 +10,10 @@ import { isPasskeySupported } from "../lib/passkey";
 function Logo() {
   return (
     <div className="flex items-center gap-2">
-      <span className="grid h-7 w-7 place-items-center bg-brand text-white font-bold">M</span>
-      <span className="text-h3 font-bold tracking-tight">Moment</span>
+      <span className="relative h-8 w-8 overflow-hidden" aria-hidden="true">
+        <img src="/ennoia-mark.png" alt="" className="absolute left-1/2 top-1/2 h-20 w-20 max-w-none -translate-x-1/2 -translate-y-1/2 object-contain" />
+      </span>
+      <span className="text-h3 font-bold tracking-[0.08em]">ENNOIA</span>
     </div>
   );
 }
@@ -130,7 +132,7 @@ function Stats() {
       </div>
       <Hatch className="h-8" />
       <div className="mt-4">
-        <SectionIndex index={1} label="Why Moment" />
+        <SectionIndex index={1} label="Why ENNOIA" />
       </div>
     </section>
   );
@@ -256,17 +258,17 @@ function Faq() {
 
 /** The actual auth — passkey-first (biometric), a full section, not a lone input. */
 function StartSection() {
-  const { login, signInPasskey, createPasskey } = useSession();
+  const { authMode, login, signInPasskey, createPasskey } = useSession();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [showEmail, setShowEmail] = useState(false);
-  const [passkeys, setPasskeys] = useState(true);
+  const [passkeys, setPasskeys] = useState(authMode === "privy");
   const [busy, setBusy] = useState<null | "signin" | "create" | "email">(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    isPasskeySupported().then(setPasskeys);
-  }, []);
+    if (authMode === "fallback") isPasskeySupported().then(setPasskeys);
+  }, [authMode]);
 
   const run = async (kind: "signin" | "create" | "email", fn: () => Promise<void>, cancelMsg: string) => {
     setBusy(kind);
@@ -277,7 +279,8 @@ function StartSection() {
       const msg = String(e?.message ?? e);
       if (/no-passkey-account/.test(msg)) setError("No passkey on this device yet — create one below.");
       else if (/cancel|NotAllowed/i.test(msg)) setError(cancelMsg);
-      else setError("Couldn't sign you in. Try again in a moment.");
+      else if (/network|fetch|failed|timeout|abort/i.test(msg)) setError("ENNOIA isn't answering. Check your connection and try again in a moment.");
+      else setError("That didn't land — give it a moment and try again.");
     } finally {
       setBusy(null);
     }
@@ -335,10 +338,10 @@ function StartSection() {
               </p>
             )}
 
-            <button onClick={() => setShowEmail((v) => !v)} className="self-start font-mono text-micro uppercase tracking-[0.12em] text-text-muted hover:text-text">
+            {authMode === "fallback" && <button onClick={() => setShowEmail((v) => !v)} className="self-start font-mono text-micro uppercase tracking-[0.12em] text-text-muted hover:text-text">
               {showEmail ? "Hide email" : "Use email instead"}
-            </button>
-            {showEmail && (
+            </button>}
+            {authMode === "fallback" && showEmail && (
               <div className="flex flex-col gap-2">
                 <input
                   type="email"
@@ -366,7 +369,7 @@ function StartSection() {
 
 function Footer() {
   const cols = [
-    ["Product", ["Why Moment", "Features", "FAQ"]],
+    ["Product", ["Why ENNOIA", "Features", "FAQ"]],
     ["Company", ["About", "Blog", "Contact"]],
     ["Legal", ["Privacy", "Terms", "Support"]],
   ] as const;
@@ -393,8 +396,8 @@ function Footer() {
           ))}
         </div>
         <div className="flex flex-col items-center justify-between gap-2 px-1 py-6 font-mono text-micro uppercase tracking-[0.12em] text-text-muted md:flex-row">
-          <span>© 2026 Moment. All rights reserved.</span>
-          <span>Moment · Built on Monad</span>
+          <span>© 2026 ENNOIA. All rights reserved.</span>
+          <span>ENNOIA · Built on Monad</span>
         </div>
       </div>
     </footer>

@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
-import { env, chainConfigured } from "./env.js";
+import { env, chainConfigured, privyConfigured, livekitConfigured, envioConfigured } from "./env.js";
 import "./db.js";
 import { registerRoutes } from "./routes.js";
 import { tick } from "./momentEngine.js";
@@ -44,8 +44,11 @@ async function main() {
   await app.listen({ port: env.PORT, host: env.HOST });
 
   const chain = getChain();
-  console.log(`\n  Moment backend on http://${env.HOST}:${env.PORT}`);
-  console.log(`  Settlement: ${chain.enabled ? "REAL Monad transactions" : "local simulation (no RPC/key configured)"}`);
+  console.log(`\n  ENNOIA backend on http://${env.HOST}:${env.PORT}`);
+  console.log(`  Auth:       ${privyConfigured() ? "Privy (passkey + embedded wallet)" : "fallback (email + native WebAuthn)"}`);
+  console.log(`  Livestream: ${livekitConfigured() ? "LiveKit rooms" : "fake-live VOD player"}`);
+  console.log(`  Settlement: ${chain.enabled ? `REAL Monad tx (chainId ${env.MONAD_CHAIN_ID})` : "local simulation (no RPC/key configured)"}`);
+  console.log(`  Analytics:  ${envioConfigured() ? "Envio indexer" : "local SQLite aggregates"}`);
   if (!chainConfigured() && chain.enabled) console.log("  (chain enabled via deployments file)");
   console.log("");
 

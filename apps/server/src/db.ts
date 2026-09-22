@@ -18,6 +18,7 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   authId TEXT UNIQUE NOT NULL,
+  privyId TEXT,
   displayName TEXT NOT NULL,
   handle TEXT NOT NULL,
   avatarUrl TEXT,
@@ -108,3 +109,11 @@ CREATE TABLE IF NOT EXISTS reaction_batches (
   createdAt INTEGER NOT NULL
 );
 `);
+
+// ---- idempotent migrations (existing DBs created before a column was added) ----
+function ensureColumn(table: string, column: string, ddl: string): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+}
+ensureColumn("users", "privyId", "privyId TEXT");
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_privy_unique ON users(privyId) WHERE privyId IS NOT NULL;");

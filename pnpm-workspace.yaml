@@ -1,7 +1,17 @@
 packages:
   - "packages/*"
   - "apps/*"
+overrides:
+  react: 19.2.3
+  react-dom: 19.2.3
 allowBuilds:
+  # Optional native speedups for `ws` (pulled in by livekit-server-sdk). Not needed — `ws`
+  # falls back to a pure-JS implementation — so we decline the build to avoid Windows toolchain
+  # requirements and silence ERR_PNPM_IGNORED_BUILDS.
+  bufferutil: false
+  utf-8-validate: false
   esbuild: true
   keccak: true
   secp256k1: true
+  '@reown/appkit': false
+  rescript: false

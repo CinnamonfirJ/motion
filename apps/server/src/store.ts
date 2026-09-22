@@ -13,7 +13,7 @@ import {
   type ReactionType,
   type Platform,
   type ReactionBatch,
-} from "@moment/core";
+} from "@ennoia/core";
 
 // ---------- helpers ----------
 const bool = (n: unknown) => Number(n) === 1;
@@ -47,14 +47,19 @@ export const Users = {
     const r = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as any;
     return r ? mapUser(r) : null;
   },
+  byPrivyId(privyId: string): User | null {
+    const r = db.prepare("SELECT * FROM users WHERE privyId = ?").get(privyId) as any;
+    return r ? mapUser(r) : null;
+  },
   create(u: Omit<User, "id" | "createdAt"> & { id?: string }): User {
-    const user: User = { id: u.id ?? newId("usr"), createdAt: Date.now(), ...u } as User;
+    const user: User = { id: u.id ?? newId("usr"), createdAt: Date.now(), privyId: u.privyId ?? null, ...u } as User;
     db.prepare(
-      `INSERT INTO users (id, authId, displayName, handle, avatarUrl, walletAddress, isCreator, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO users (id, authId, privyId, displayName, handle, avatarUrl, walletAddress, isCreator, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       user.id,
       user.authId,
+      user.privyId ?? null,
       user.displayName,
       user.handle,
       user.avatarUrl,
@@ -64,11 +69,17 @@ export const Users = {
     );
     return user;
   },
+  /** Link a Privy id (and refresh the embedded wallet) onto an existing user. */
+  linkPrivy(id: string, privyId: string, walletAddress?: string): void {
+    if (walletAddress) db.prepare("UPDATE users SET privyId = ?, walletAddress = ? WHERE id = ?").run(privyId, walletAddress, id);
+    else db.prepare("UPDATE users SET privyId = ? WHERE id = ?").run(privyId, id);
+  },
 };
 function mapUser(r: any): User {
   return {
     id: r.id,
     authId: r.authId,
+    privyId: r.privyId ?? null,
     displayName: r.displayName,
     handle: r.handle,
     avatarUrl: r.avatarUrl,
@@ -282,6 +293,31 @@ export const Moments = {
     return (
       db.prepare("SELECT * FROM moments WHERE creatorId = ? AND state IN ('PUBLISHED','SETTLED') ORDER BY confirmedAt DESC").all(creatorId) as any[]
     ).map(hydrateMoment);
+  },
+  /** Curator leaderboard: total curator reward units per user (local fallback for Envio). */
+  curatorLeaderboard(limit = 20): { userId: string; totalUnits: bigint; firstFinds: number; momentsCurated: number }[] {
+    const rows = db
+      .prepare(
+        `SELECT userId,
+                rewardUnits,
+                rank
+           FROM founding_curators fc
+           JOIN moments m ON m.id = fc.momentId
+          WHERE m.state IN ('PUBLISHED','SETTLED')`
+      )
+      .all() as any[];
+    const agg = new Map<string, { totalUnits: bigint; firstFinds: number; momentsCurated: number }>();
+    for (const r of rows) {
+      const cur = agg.get(r.userId) ?? { totalUnits: 0n, firstFinds: 0, momentsCurated: 0 };
+      cur.totalUnits += BigInt(r.rewardUnits ?? "0");
+      cur.momentsCurated += 1;
+      if (Number(r.rank) === 1) cur.firstFinds += 1;
+      agg.set(r.userId, cur);
+    }
+    return [...agg.entries()]
+      .map(([userId, v]) => ({ userId, ...v }))
+      .sort((a, b) => (b.totalUnits > a.totalUnits ? 1 : b.totalUnits < a.totalUnits ? -1 : 0))
+      .slice(0, limit);
   },
 };
 function mapCurator(r: any): FoundingCurator {

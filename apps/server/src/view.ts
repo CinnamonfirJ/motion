@@ -1,6 +1,7 @@
-import { formatUsd, statusLabel, type Moment, type Stream, type User, type FoundingCurator, type Settlement } from "@moment/core";
-import { env } from "./env.js";
-import { getChain } from "./chain.js";
+import { formatUsd, statusLabel, type Moment, type Stream, type User, type FoundingCurator, type Settlement } from "@ennoia/core";
+import { env, livekitConfigured } from "./env.js";
+import { getChain, momentIdHash } from "./chain.js";
+import { roomNameForStream } from "./livekit.js";
 import { Users, Streams, Moments } from "./store.js";
 
 /** DTOs are JSON-safe (no bigint) and carry human display values. Clients never see raw units. */
@@ -19,6 +20,9 @@ export function userView(u: User) {
 
 export function streamView(s: Stream, viewerCount: number) {
   const creator = Users.byId(s.creatorId);
+  // A stream renders as a real LiveKit room when LiveKit is configured AND it has no VOD source;
+  // seeded sample streams keep a videoUrl and play through the fake-live VOD player.
+  const mode: "livekit" | "vod" = livekitConfigured() && !s.videoUrl ? "livekit" : "vod";
   return {
     id: s.id,
     title: s.title,
@@ -28,6 +32,8 @@ export function streamView(s: Stream, viewerCount: number) {
     startedAt: s.startedAt,
     isLive: s.isLive,
     viewerCount,
+    mode,
+    livekitRoom: mode === "livekit" ? roomNameForStream(s.id) : null,
     creator: creator ? { id: creator.id, displayName: creator.displayName, handle: creator.handle, avatarUrl: creator.avatarUrl } : null,
   };
 }
@@ -83,6 +89,10 @@ export function momentView(m: Moment) {
     foundingCurators: m.foundingCurators.map(curatorView),
     foundingCuratorCount: m.foundingCurators.length,
     settlement: settlementView(m.settlement),
+    // On-chain identity of this Moment (createMoment/MomentCreated key) — used to cross-reference
+    // Envio-indexed analytics and the block explorer. Present regardless of settlement status.
+    onchainMomentId: momentIdHash(m.id),
+    livekitRoom: stream ? roomNameForStream(stream.id) : null,
     createdAt: m.createdAt,
   };
 }

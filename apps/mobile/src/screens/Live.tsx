@@ -59,7 +59,7 @@ export function Live() {
 
   // Seek to authoritative position + resync on foreground (PRD §35 backgrounding).
   useEffect(() => {
-    if (!stream) return;
+    if (!stream || stream.mode !== "vod") return;
     const seek = () => {
       const s = sync.current;
       if (!s) return;
@@ -116,7 +116,16 @@ export function Live() {
   return (
     <View style={{ flex: 1, backgroundColor: color.night }}>
       <View style={{ height: H, backgroundColor: "#000" }}>
-        <VideoView player={player} style={{ flex: 1 }} contentFit="cover" nativeControls={false} />
+        {stream.mode === "vod" ? (
+          <VideoView player={player} style={{ flex: 1 }} contentFit="cover" nativeControls={false} />
+        ) : (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 32 }}>
+            <Text style={{ color: color.text, ...type.h2, textAlign: "center" }}>LiveKit room</Text>
+            <Text style={{ color: color.textSecondary, ...type.bodysm, textAlign: "center", marginTop: 8 }}>
+              Live video on mobile requires the ENNOIA development build. Expo Go keeps the VOD fallback only.
+            </Text>
+          </View>
+        )}
         <SafeAreaView style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -170,7 +179,7 @@ export function Live() {
                 const r = await api.tip(id);
                 setToast(`Tip sent · ${r.amountUsd}`);
               } catch {
-                setToast("Tip is taking longer than expected.");
+                setToast("Your tip needs a moment — still going through.");
               }
             }}
             style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}
@@ -185,7 +194,7 @@ export function Live() {
                 await api.clip(id, at);
                 setToast("Clip saved to your finds");
               } catch {
-                setToast("Clip is still processing.");
+                setToast("Your clip's coming together — one moment.");
               }
             }}
             style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}

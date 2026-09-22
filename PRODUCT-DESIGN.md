@@ -1,4 +1,4 @@
-# Moment
+# ENNOIA
 ## Product Design Brief
 
 **Platform:** Web, iOS, Android  
@@ -10,7 +10,7 @@
 
 # 1. Design Objective
 
-Moment should feel like a **live entertainment product first**, a **curation product second**, and a blockchain product almost never.
+ENNOIA should feel like a **live entertainment product first**, a **curation product second**, and a blockchain product almost never.
 
 The interface must make one idea immediately understandable:
 
@@ -36,7 +36,7 @@ Instead, it should feel like a modern social video application with a hidden eco
 
 ## Design personality
 
-Moment should feel:
+ENNOIA should feel:
 
 **Dark, electric, youthful, confident, live, polished, slightly playful.**
 
@@ -99,7 +99,7 @@ The contrast between calm and pulse states makes a detected Moment feel genuinel
 
 ## The interface should become more alive as attention rises.
 
-When nothing important is happening, Moment is quiet.
+When nothing important is happening, ENNOIA is quiet.
 
 When reactions increase:
 
@@ -425,7 +425,7 @@ Full-screen near-black background.
 
 Center:
 
-**Moment logo**
+**ENNOIA logo**
 
 Optional tiny animated pulse underneath.
 
@@ -447,7 +447,7 @@ Do not show blockchain or sponsor branding here.
 
 Top 15%:
 
-Moment logo.
+ENNOIA logo.
 
 Middle:
 
@@ -491,7 +491,7 @@ Two-column layout.
 
 Product statement.
 
-Large Moment logo.
+Large ENNOIA logo.
 
 Headline.
 
@@ -525,7 +525,7 @@ and
 
 Left:
 
-Moment logo.
+ENNOIA logo.
 
 Right:
 
@@ -1336,7 +1336,7 @@ Low-priority labels.
 
 # 9.3 Brand Accent
 
-## Moment Lime
+## ENNOIA Lime
 
 `#A7F46A`
 
@@ -2144,7 +2144,7 @@ Web keyboard focus:
 
 Recommended:
 
-`Moment Lime`
+`ENNOIA Lime`
 
 with dark outer offset.
 
@@ -2279,25 +2279,25 @@ Reaction controls must never sit under system gesture areas.
 
 Suggested component namespace:
 
-`Moment / Navigation / BottomNav`
+`ENNOIA / Navigation / BottomNav`
 
-`Moment / Live / Player`
+`ENNOIA / Live / Player`
 
-`Moment / Live / ReactionButton`
+`ENNOIA / Live / ReactionButton`
 
-`Moment / Live / PulseGraph`
+`ENNOIA / Live / PulseGraph`
 
-`Moment / Moment / Card`
+`ENNOIA / Moment / Card`
 
-`Moment / Moment / DetectedOverlay`
+`ENNOIA / Moment / DetectedOverlay`
 
-`Moment / Curator / RankBadge`
+`ENNOIA / Curator / RankBadge`
 
-`Moment / Reward / Balance`
+`ENNOIA / Reward / Balance`
 
-`Moment / Reward / TransactionRow`
+`ENNOIA / Reward / TransactionRow`
 
-`Moment / Feedback / Toast`
+`ENNOIA / Feedback / Toast`
 
 This keeps Figma and implementation naming aligned.
 
@@ -2534,11 +2534,11 @@ Everything else is secondary.
 - exact gradient forms
 - exact screen layouts
 
-Moment needs its own recognizable system.
+ENNOIA needs its own recognizable system.
 
 ---
 
-# 44. The Resulting Moment Identity
+# 44. The Resulting ENNOIA Identity
 
 The visual formula should be:
 
@@ -2554,7 +2554,7 @@ The visual formula should be:
 
 =
 
-### Moment
+### ENNOIA
 
 Dark most of the time.
 

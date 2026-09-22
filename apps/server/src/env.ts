@@ -40,11 +40,27 @@ export const env = {
 
   /** Monad settlement. If unset, settlement runs in a local idempotent simulation. */
   MONAD_RPC_URL: process.env.MONAD_RPC_URL ?? "",
+  MONAD_CHAIN_ID: Number(process.env.MONAD_CHAIN_ID ?? 10143), // Monad testnet
   MOMENT_REWARDS_ADDRESS: process.env.MOMENT_REWARDS_ADDRESS ?? "",
   SETTLER_PRIVATE_KEY: process.env.SETTLER_PRIVATE_KEY ?? "",
   /** Platform recipient of the 10% cut. Defaults to the settler address when unset. */
   PLATFORM_ADDRESS: process.env.PLATFORM_ADDRESS ?? "",
   MONAD_EXPLORER_TX: process.env.MONAD_EXPLORER_TX ?? "https://testnet.monadexplorer.com/tx/",
+
+  /** Privy — auth + embedded-wallet source of truth. Blank APP_ID => fallback auth. */
+  PRIVY_APP_ID: process.env.PRIVY_APP_ID ?? "",
+  PRIVY_APP_SECRET: process.env.PRIVY_APP_SECRET ?? "",
+  PRIVY_VERIFICATION_KEY: (process.env.PRIVY_VERIFICATION_KEY ?? "").replace(/\\n/g, "\n"),
+
+  /** LiveKit — livestream A/V. Secrets stay server-side; blank URL => VOD fallback. */
+  LIVEKIT_URL: process.env.LIVEKIT_URL ?? "",
+  LIVEKIT_API_KEY: process.env.LIVEKIT_API_KEY ?? "",
+  LIVEKIT_API_SECRET: process.env.LIVEKIT_API_SECRET ?? "",
+  LIVEKIT_EGRESS_BUCKET: process.env.LIVEKIT_EGRESS_BUCKET ?? "",
+  LIVEKIT_EGRESS_REGION: process.env.LIVEKIT_EGRESS_REGION ?? "",
+
+  /** Envio — Monad indexer GraphQL endpoint. Blank => local SQLite aggregates. */
+  ENVIO_GRAPHQL_URL: process.env.ENVIO_GRAPHQL_URL ?? "",
 
   /**
    * Display peg: integer token units -> USD in the UI (display only, never affects on-chain
@@ -67,4 +83,19 @@ export const env = {
 /** True when a real Monad settlement path is fully configured. */
 export function chainConfigured(): boolean {
   return Boolean(env.MONAD_RPC_URL && env.MOMENT_REWARDS_ADDRESS && env.SETTLER_PRIVATE_KEY);
+}
+
+/** True when Privy is the auth/wallet source of truth (else built-in fallback auth). */
+export function privyConfigured(): boolean {
+  return Boolean(env.PRIVY_APP_ID && env.PRIVY_APP_SECRET);
+}
+
+/** True when LiveKit can mint room tokens (else the fake-live VOD player is used). */
+export function livekitConfigured(): boolean {
+  return Boolean(env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET);
+}
+
+/** True when Envio-indexed analytics are available (else local SQLite aggregates). */
+export function envioConfigured(): boolean {
+  return Boolean(env.ENVIO_GRAPHQL_URL);
 }
