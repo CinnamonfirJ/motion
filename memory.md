@@ -1,6 +1,6 @@
 # Memory — ENNOIA Rebrand and Integrations
 
-Last updated: 2026-09-22 13:05 Africa/Lagos
+Last updated: 2026-09-22 14:03 Africa/Lagos
 
 ## What was built
 
@@ -27,7 +27,7 @@ Last updated: 2026-09-22 13:05 Africa/Lagos
 
 ## Current state
 
-- Rebrand changes are present but uncommitted in an already-dirty worktree that also contains the earlier integration work. Preserve all unrelated/user changes.
+- The complete ENNOIA rebrand and Privy/LiveKit/Monad/Envio integration is committed on the `envio` deployment branch and pushed to `origin/envio`.
 - `pnpm typecheck` passes for core, mobile, server, and web.
 - Core tests pass: 42/42. Contract tests pass: 8/8.
 - Production web build passes; only existing Privy/Rollup pure-annotation and large-bundle warnings remain.
@@ -38,9 +38,9 @@ Last updated: 2026-09-22 13:05 Africa/Lagos
 ## Next session starts with
 
 1. Run `/remember restore` and confirm this handoff.
-2. Review `git diff` without discarding the existing integration changes.
-3. If continuing the rebrand, launch the Expo app or a development build to visually verify the launcher icon, splash screen, and mobile sign-in header on a device/simulator.
-4. Keep EAS mobile builds manual unless the user explicitly asks Codex to build one.
+2. Check the Envio deployment dashboard for the `envio` branch build/deployment status and configure the required Envio environment variables if they are not already present.
+3. Add branch protection to `envio` so future deployments arrive through pull requests rather than direct pushes.
+4. If continuing the mobile rebrand, launch the Expo app manually to visually verify the launcher icon, splash screen, and sign-in header. Keep EAS mobile builds manual unless the user explicitly asks Codex to build one.
 
 ## Open questions
 
