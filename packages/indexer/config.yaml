@@ -1,7 +1,6 @@
 # Envio HyperIndex manifest — indexes MomentRewards on Monad.
 #
-# Set the contract address + RPC via env before running:
-#   ENVIO_MOMENT_REWARDS_ADDRESS, ENVIO_MONAD_RPC_URL   (see .env.example)
+# Optional env overrides: ENVIO_MOMENT_REWARDS_ADDRESS, ENVIO_MONAD_RPC_URL.
 # Then:  pnpm codegen && pnpm dev     (needs Docker running)
 name: ennoia-indexer
 description: Onchain Moments, curators, tips, settlements and rewards for ENNOIA.
@@ -11,23 +10,24 @@ field_selection:
   transaction_fields:
     - hash
 
-# Monad testnet (chain id 10143). Override start_block to the contract's deploy block.
-networks:
+# Monad testnet (chain id 10143), MomentRewards deployed at block 65,032,013.
+contracts:
+  - name: MomentRewards
+    handler: ./src/EventHandlers.ts
+    events:
+      - event: MomentCreated(bytes32 indexed momentId, bytes32 indexed streamId, address indexed creator, uint64 clipStart, uint64 clipEnd, uint8 category, uint256 curatorCount)
+      - event: FoundingCuratorRecorded(bytes32 indexed momentId, address indexed curator, uint8 rank)
+      - event: Tipped(bytes32 indexed streamId, address indexed from, uint256 amount, uint256 streamTotal)
+      - event: MomentSettled(bytes32 indexed momentId, address indexed creator, uint256 creatorAmount, uint256 curatorPool, uint256 platformAmount, uint256 curatorCount, uint256 totalAmount)
+      - event: CuratorPaid(bytes32 indexed momentId, address indexed curator, uint8 rank, uint256 amount)
+      - event: PlatformPaid(bytes32 indexed momentId, address indexed platform, uint256 amount)
+      - event: ReactionBatchCommitted(bytes32 indexed batchId, bytes32 indexed streamId, uint256 reactionCount, uint64 fromTs, uint64 toTs, bytes32 commitment)
+chains:
   - id: 10143
-    start_block: 0
-    # Monad has no HyperSync endpoint yet in some environments; fall back to RPC.
-    rpc_config:
-      url: ${ENVIO_MONAD_RPC_URL}
+    start_block: 65032013
+    # Use RPC when HyperSync is unavailable for this chain.
+    rpc: ${ENVIO_MONAD_RPC_URL:-https://testnet-rpc.monad.xyz}
     contracts:
       - name: MomentRewards
         address:
-          - ${ENVIO_MOMENT_REWARDS_ADDRESS}
-        handler: src/EventHandlers.ts
-        events:
-          - event: MomentCreated(bytes32 indexed momentId, bytes32 indexed streamId, address indexed creator, uint64 clipStart, uint64 clipEnd, uint8 category, uint256 curatorCount)
-          - event: FoundingCuratorRecorded(bytes32 indexed momentId, address indexed curator, uint8 rank)
-          - event: Tipped(bytes32 indexed streamId, address indexed from, uint256 amount, uint256 streamTotal)
-          - event: MomentSettled(bytes32 indexed momentId, address indexed creator, uint256 creatorAmount, uint256 curatorPool, uint256 platformAmount, uint256 curatorCount, uint256 totalAmount)
-          - event: CuratorPaid(bytes32 indexed momentId, address indexed curator, uint8 rank, uint256 amount)
-          - event: PlatformPaid(bytes32 indexed momentId, address indexed platform, uint256 amount)
-          - event: ReactionBatchCommitted(bytes32 indexed batchId, bytes32 indexed streamId, uint256 reactionCount, uint64 fromTs, uint64 toTs, bytes32 commitment)
+          - "${ENVIO_MOMENT_REWARDS_ADDRESS:-0xF5dBf042aaDb38e4519D2B972C0a4f16C22a20EA}"
