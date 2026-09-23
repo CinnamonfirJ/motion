@@ -38,7 +38,7 @@ function walletFromUser(user: PrivyUser): string | null {
   const wallets = user.linked_accounts.filter(
     (a: any) => a.type === "wallet" && a.chain_type === "ethereum"
   ) as any[];
-  const embedded = wallets.find((w) => w.wallet_client_type === "privy");
+  const embedded = wallets.find((w) => w.wallet_client_type === "privy" || w.wallet_client_type === "privy-v2");
   return (embedded ?? wallets[0])?.address ?? null;
 }
 
@@ -57,10 +57,17 @@ export async function verifyPrivyToken(accessToken: string): Promise<PrivyIdenti
   const privy = getClient();
   // The current Node SDK verifies locally through the app's JWKS (or key override).
   const claims = await privy.utils().auth().verifyAccessToken(accessToken);
-  const user = await privy.users()._get(claims.user_id);
+  // Wallet creation can finish on the client just before it is visible to the user API.
+  let user = await privy.users()._get(claims.user_id);
+  let walletAddress = walletFromUser(user);
+  for (let attempt = 0; !walletAddress && attempt < 3; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 200 * 2 ** attempt));
+    user = await privy.users()._get(claims.user_id);
+    walletAddress = walletFromUser(user);
+  }
   return {
     privyId: claims.user_id,
-    walletAddress: walletFromUser(user),
+    walletAddress,
     displayName: nameFromUser(user),
   };
 }

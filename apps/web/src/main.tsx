@@ -23,7 +23,8 @@ const app = privyAppId ? (
     clientId={import.meta.env.VITE_PRIVY_CLIENT_ID || undefined}
     config={{
       loginMethods: ["passkey", "email"],
-      embeddedWallets: { ethereum: { createOnLogin: "all-users" } },
+      // The session flow creates missing wallets explicitly before exchanging the Privy token.
+      embeddedWallets: { ethereum: { createOnLogin: "off" } },
       supportedChains: [monadTestnet],
       defaultChain: monadTestnet,
       appearance: { theme: "dark", accentColor: "#8b5cf6" },
