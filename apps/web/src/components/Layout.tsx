@@ -16,8 +16,10 @@ const NAV: { to: string; label: string; Icon: ComponentType<{ size?: number }>; 
 function Logo() {
   return (
     <div className="flex items-center gap-2">
-      <span className="grid h-7 w-7 place-items-center bg-brand text-white font-bold">M</span>
-      <span className="text-h3 font-bold tracking-tight">Moment</span>
+      <span className="relative h-8 w-8 overflow-hidden" aria-hidden="true">
+        <img src="/ennoia-mark.png" alt="" className="absolute left-1/2 top-1/2 h-20 w-20 max-w-none -translate-x-1/2 -translate-y-1/2 object-contain" />
+      </span>
+      <span className="text-h3 font-bold tracking-[0.08em]">ENNOIA</span>
     </div>
   );
 }
@@ -69,6 +71,7 @@ export function Layout() {
           </div>
           <ThemeToggle />
         </div>
+        <div className="flex justify-center gap-3 pt-2 text-micro text-text-muted"><NavLink to="/privacy">Privacy</NavLink><NavLink to="/terms">Terms</NavLink></div>
       </aside>
 
       {/* Mobile top bar */}

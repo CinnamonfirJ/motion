@@ -65,7 +65,7 @@ export interface CuratorConfig {
 export interface RewardConfig {
   /** Default reward pool per confirmed Moment, in smallest token units (wei). */
   defaultPoolUnits: bigint;
-  /** Creator share in basis points (7000 = 70%). MOMENT REWARD_SPLIT. */
+  /** Creator share in basis points (7000 = 70%). ENNOIA REWARD_SPLIT. */
   creatorShareBps: number;
   /** Founding-Curator pool share in basis points (2000 = 20%). */
   curatorShareBps: number;
@@ -112,7 +112,7 @@ export const DEFAULT_CONFIG: MomentConfig = {
   reward: {
     // 0.02 MON per Moment by default (18-decimal token) — a small, safe demo pool draw.
     defaultPoolUnits: 20_000_000_000_000_000n,
-    // MOMENT REWARD_SPLIT — creator 70 / curators 20 / platform 10.
+    // ENNOIA REWARD_SPLIT — creator 70 / curators 20 / platform 10.
     creatorShareBps: 7_000,
     curatorShareBps: 2_000,
     platformShareBps: 1_000,

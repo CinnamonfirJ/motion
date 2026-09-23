@@ -1,4 +1,4 @@
-// MOMENT design tokens (black + purple). Same 20-color palette as the web root tokens.
+// ENNOIA design tokens (black + purple). Same 20-color palette as the web root tokens.
 // `lime` keeps its name as the accent-FILL token but is now bright purple; `brand` is the
 // primary-button purple (with white text).
 export const color = {

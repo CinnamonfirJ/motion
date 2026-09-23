@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, AppState, Modal, Dimensions } from "react-native";
+import { View, Text, Pressable, AppState, Modal, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -8,6 +8,9 @@ import { api, type StreamDTO, type SyncDTO } from "../lib/api";
 import { realtime } from "../lib/realtime";
 import { Avatar, Pill, Loading } from "../components/ui";
 import { color, type, radius, REACTION_ICON, eyebrow } from "../theme";
+import { LiveKitStage } from "../components/livekit-stage";
+import { useSession } from "../session";
+import { sendReaction } from "../lib/reaction-queue";
 
 const REACTIONS = [
   { type: "fire", label: "React fire" },
@@ -27,6 +30,8 @@ export function Live() {
   const [forming, setForming] = useState(false);
   const [celebration, setCelebration] = useState<{ rank: number; rewardUsd: string; momentId: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const { sendTransaction, user } = useSession();
+  const { height } = useWindowDimensions();
 
   useEffect(() => {
     if (!toast) return;
@@ -59,7 +64,7 @@ export function Live() {
 
   // Seek to authoritative position + resync on foreground (PRD §35 backgrounding).
   useEffect(() => {
-    if (!stream) return;
+    if (!stream || stream.mode !== "vod") return;
     const seek = () => {
       const s = sync.current;
       if (!s) return;
@@ -106,17 +111,20 @@ export function Live() {
     const s = sync.current;
     const clientStreamTimeMs = s ? streamTimeMs(s.startedAt, realtime.serverNow()) : 0;
     try {
-      await api.react(id, t, clientStreamTimeMs, newEventId(), "ios");
+      const result = await sendReaction({ streamId: id, type: t, clientStreamTimeMs, eventId: newEventId(), platform: process.env.EXPO_OS === "android" ? "android" : "ios" });
+      if (result === "queued") setToast("Reaction saved — it will send when you're back online.");
     } catch {}
   };
 
   if (!stream) return <Loading label="Joining live…" />;
-  const H = Math.min(Dimensions.get("window").height * 0.62, 640);
+  const H = Math.min(height * 0.62, 640);
 
   return (
     <View style={{ flex: 1, backgroundColor: color.night }}>
       <View style={{ height: H, backgroundColor: "#000" }}>
-        <VideoView player={player} style={{ flex: 1 }} contentFit="cover" nativeControls={false} />
+        {stream.mode === "vod" ? (
+          <VideoView player={player} style={{ flex: 1 }} contentFit="cover" nativeControls={false} />
+        ) : <LiveKitStage streamId={stream.id} />}
         <SafeAreaView style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -149,6 +157,24 @@ export function Live() {
         ) : null}
       </View>
 
+      {stream.creator?.id === user?.id ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="End live stream"
+          onPress={async () => {
+            try {
+              await api.endStream(id);
+              nav.goBack();
+            } catch {
+              setToast("The stream could not be ended yet. Try again.");
+            }
+          }}
+          style={{ position: "absolute", top: 116, right: 16, backgroundColor: color.error, paddingHorizontal: 12, paddingVertical: 8 }}
+        >
+          <Text style={{ color: "#FFFFFF", ...eyebrow(11) }}>End live</Text>
+        </Pressable>
+      ) : null}
+
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
         {heatingUp ? <Text style={{ color: color.lime, ...eyebrow(11) }}>● Heating up</Text> : <View style={{ height: 16 }} />}
         <View style={{ flexDirection: "row", gap: 16 }}>
@@ -168,9 +194,10 @@ export function Live() {
             onPress={async () => {
               try {
                 const r = await api.tip(id);
+                await sendTransaction(r.transaction);
                 setToast(`Tip sent · ${r.amountUsd}`);
               } catch {
-                setToast("Tip is taking longer than expected.");
+                setToast("Your tip needs a moment — still going through.");
               }
             }}
             style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}
@@ -185,7 +212,7 @@ export function Live() {
                 await api.clip(id, at);
                 setToast("Clip saved to your finds");
               } catch {
-                setToast("Clip is still processing.");
+                setToast("Your clip's coming together — one moment.");
               }
             }}
             style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}

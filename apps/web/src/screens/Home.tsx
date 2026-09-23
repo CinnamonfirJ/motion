@@ -54,7 +54,7 @@ export function Home() {
             <h2 className="text-h2">Live now</h2>
             <LivePill />
           </div>
-          <SectionIndex index={1} label="Streams" />
+          <Link to="/go-live" className="border border-lime px-3 py-1.5 font-mono text-micro uppercase tracking-[0.1em] text-lime">Go live</Link>
         </div>
         {!streams ? (
           <div className="flex gap-4 overflow-hidden">

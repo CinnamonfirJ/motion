@@ -1,9 +1,10 @@
-import type { ReactionType } from "@moment/core";
+import type { ReactionType } from "@ennoia/core";
 
 /** Minimal structural type for a ws WebSocket (avoids depending on @types/ws). */
 export interface SocketLike {
   readyState: number;
   send(data: string): void;
+  close(code?: number, reason?: string): void;
   on(event: string, cb: (...args: any[]) => void): void;
 }
 
@@ -37,6 +38,10 @@ class Hub {
     ws.on("close", () => this.conns.delete(conn));
     ws.on("error", () => this.conns.delete(conn));
     return conn;
+  }
+
+  authenticate(conn: Conn, userId: string): void {
+    conn.userId = userId;
   }
 
   subscribe(conn: Conn, streamId: string) {

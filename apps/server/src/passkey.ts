@@ -71,16 +71,18 @@ export function verifyClientData(
 
 // ---- credential store ----
 export const Passkeys = {
-  add(credentialId: string, userId: string, publicKey: string | null): void {
-    db.prepare(
-      "INSERT OR IGNORE INTO passkey_credentials (credentialId, userId, publicKey, createdAt) VALUES (?, ?, ?, ?)"
-    ).run(credentialId, userId, publicKey, Date.now());
+  async add(credentialId: string, userId: string, publicKey: string | null): Promise<void> {
+    await db.execute(
+      "INSERT INTO passkey_credentials (credentialId, userId, publicKey, createdAt) VALUES ($1,$2,$3,$4) ON CONFLICT(credentialId) DO NOTHING",
+      [credentialId, userId, publicKey, Date.now()]
+    );
   },
-  userIdFor(credentialId: string): string | null {
-    const r = db.prepare("SELECT userId FROM passkey_credentials WHERE credentialId = ?").get(credentialId) as any;
-    return r?.userId ?? null;
+  async userIdFor(credentialId: string): Promise<string | null> {
+    const [row] = await db.query<Record<string, unknown>>("SELECT userId FROM passkey_credentials WHERE credentialId = $1", [credentialId]);
+    return row ? String(row.userId ?? row.userid) : null;
   },
-  exists(credentialId: string): boolean {
-    return !!db.prepare("SELECT 1 FROM passkey_credentials WHERE credentialId = ?").get(credentialId);
+  async exists(credentialId: string): Promise<boolean> {
+    const rows = await db.query<Record<string, unknown>>("SELECT 1 AS found FROM passkey_credentials WHERE credentialId = $1", [credentialId]);
+    return rows.length > 0;
   },
 };

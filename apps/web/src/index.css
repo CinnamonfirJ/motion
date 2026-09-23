@@ -3,13 +3,13 @@
 @tailwind utilities;
 
 /* ===================================================================
-   MOMENT design tokens — single source of truth (purple brand).
+   ENNOIA design tokens — single source of truth (purple brand).
    Define the 20-color palette ONCE, then map semantic tokens to it.
    DEFAULT theme is LIGHT; dark mode is opt-in via [data-theme="dark"].
    Accents stay < ~10% of any screen.
    =================================================================== */
 :root {
-  /* Raw MOMENT palette (do not use these directly in components — use semantics below). */
+  /* Raw ENNOIA palette (do not use these directly in components — use semantics below). */
   --color-1: #000000;
   --color-2: #b4ffa0;
   --color-3: #8cffc8;
@@ -108,7 +108,7 @@ body {
 }
 
 .celebration-gradient {
-  /* MOMENT brand gradient: --color-9 → --color-11 → --color-14 */
+  /* ENNOIA brand gradient: --color-9 → --color-11 → --color-14 */
   background-image: linear-gradient(135deg, var(--color-9) 0%, var(--color-11) 50%, var(--color-14) 100%);
 }
 

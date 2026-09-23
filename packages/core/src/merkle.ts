@@ -3,7 +3,7 @@
  * we commit a Merkle-style root over a batch of reaction leaves, proving the reactions
  * existed within a time range and contributed to a Moment — without bloating the chain.
  *
- * The hash function is injected so @moment/core stays dependency-free; the backend passes
+ * The hash function is injected so @ennoia/core stays dependency-free; the backend passes
  * keccak256 (ethers) to stay consistent with the Solidity side.
  */
 

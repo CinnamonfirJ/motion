@@ -1,36 +1,114 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import postgres, { type Sql } from "postgres";
 import { env } from "./env.js";
 
-/**
- * Single SQLite database (built-in node:sqlite — no native build step).
- * The backend is the authoritative store for identity, streams, reactions, Moments,
- * curators, batches and settlements (PRD §9). bigint reward units are stored as TEXT.
- */
-mkdirSync(dirname(env.DB_PATH), { recursive: true });
-export const db = new DatabaseSync(env.DB_PATH);
+type Primitive = string | number | boolean | null;
+type Params = readonly Primitive[];
+type SqlitePrimitive = string | number | null;
 
-db.exec("PRAGMA journal_mode = WAL;");
-db.exec("PRAGMA foreign_keys = ON;");
+export interface DatabaseClient {
+  readonly dialect: "postgres" | "sqlite";
+  query<T extends Record<string, unknown>>(statement: string, params?: Params): Promise<T[]>;
+  execute(statement: string, params?: Params): Promise<number>;
+  transaction<T>(work: (client: DatabaseClient) => Promise<T>): Promise<T>;
+  close(): Promise<void>;
+}
 
-db.exec(`
+function sqliteStatement(statement: string, params: Params): { statement: string; params: SqlitePrimitive[] } {
+  const ordered: SqlitePrimitive[] = [];
+  const converted = statement.replace(/\$(\d+)/g, (_match, index) => {
+    const item = params[Number(index) - 1] ?? null;
+    ordered.push(typeof item === "boolean" ? Number(item) : item);
+    return "?";
+  });
+  return { statement: converted, params: ordered };
+}
+
+function sqliteClient(path: string): DatabaseClient {
+  mkdirSync(dirname(path), { recursive: true });
+  const sqlite = new DatabaseSync(path);
+  sqlite.exec("PRAGMA journal_mode = WAL;");
+  sqlite.exec("PRAGMA foreign_keys = ON;");
+
+  const client: DatabaseClient = {
+    dialect: "sqlite",
+    async query<T extends Record<string, unknown>>(statement: string, params: Params = []): Promise<T[]> {
+      const converted = sqliteStatement(statement, params);
+      return sqlite.prepare(converted.statement).all(...converted.params) as T[];
+    },
+    async execute(statement: string, params: Params = []): Promise<number> {
+      const converted = sqliteStatement(statement, params);
+      const result = sqlite.prepare(converted.statement).run(...converted.params);
+      return Number(result.changes);
+    },
+    async transaction<T>(work: (transaction: DatabaseClient) => Promise<T>): Promise<T> {
+      sqlite.exec("BEGIN IMMEDIATE");
+      try {
+        const result = await work(client);
+        sqlite.exec("COMMIT");
+        return result;
+      } catch (error) {
+        sqlite.exec("ROLLBACK");
+        throw error;
+      }
+    },
+    async close(): Promise<void> {
+      sqlite.close();
+    },
+  };
+  return client;
+}
+
+function postgresClient(url: string, existing?: Sql): DatabaseClient {
+  const sql = existing ?? postgres(url, {
+    max: Number(process.env.DB_POOL_SIZE ?? 5),
+    idle_timeout: 20,
+    connect_timeout: 15,
+    ssl: "require",
+    transform: { undefined: null },
+  });
+
+  return {
+    dialect: "postgres",
+    async query<T extends Record<string, unknown>>(statement: string, params: Params = []): Promise<T[]> {
+      return (await sql.unsafe(statement, [...params] as never[])) as unknown as T[];
+    },
+    async execute(statement: string, params: Params = []): Promise<number> {
+      const result = await sql.unsafe(statement, [...params] as never[]);
+      return result.count;
+    },
+    async transaction<T>(work: (transaction: DatabaseClient) => Promise<T>): Promise<T> {
+      return sql.begin(async (transactionSql) => work(postgresClient(url, transactionSql as unknown as Sql))) as Promise<T>;
+    },
+    async close(): Promise<void> {
+      if (!existing) await sql.end({ timeout: 5 });
+    },
+  };
+}
+
+export const db: DatabaseClient = env.DATABASE_URL ? postgresClient(env.DATABASE_URL) : sqliteClient(env.DB_PATH);
+
+const schema = `
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   authId TEXT UNIQUE NOT NULL,
+  privyId TEXT,
   displayName TEXT NOT NULL,
   handle TEXT NOT NULL,
   avatarUrl TEXT,
   walletAddress TEXT NOT NULL,
-  isCreator INTEGER NOT NULL DEFAULT 0,
-  createdAt INTEGER NOT NULL
+  isCreator BOOLEAN NOT NULL DEFAULT FALSE,
+  createdAt BIGINT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_privy_unique ON users(privyId) WHERE privyId IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS passkey_credentials (
   credentialId TEXT PRIMARY KEY,
-  userId TEXT NOT NULL REFERENCES users(id),
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   publicKey TEXT,
-  createdAt INTEGER NOT NULL
+  createdAt BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_passkey_user ON passkey_credentials(userId);
 
@@ -38,59 +116,66 @@ CREATE TABLE IF NOT EXISTS streams (
   id TEXT PRIMARY KEY,
   creatorId TEXT NOT NULL REFERENCES users(id),
   title TEXT NOT NULL,
-  videoUrl TEXT NOT NULL,
-  durationSec REAL NOT NULL,
+  videoUrl TEXT NOT NULL DEFAULT '',
+  durationSec DOUBLE PRECISION NOT NULL DEFAULT 0,
   thumbnailUrl TEXT,
-  startedAt INTEGER NOT NULL,
-  isLive INTEGER NOT NULL DEFAULT 1,
-  createdAt INTEGER NOT NULL
+  startedAt BIGINT NOT NULL,
+  endedAt BIGINT,
+  isLive BOOLEAN NOT NULL DEFAULT TRUE,
+  egressId TEXT,
+  recordingPrefix TEXT,
+  recordingStartedAt BIGINT,
+  createdAt BIGINT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS reactions (
   id TEXT PRIMARY KEY,
   eventId TEXT UNIQUE NOT NULL,
-  userId TEXT NOT NULL REFERENCES users(id),
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   walletAddress TEXT NOT NULL,
-  streamId TEXT NOT NULL REFERENCES streams(id),
-  streamTimeMs INTEGER NOT NULL,
-  serverTimeMs INTEGER NOT NULL,
+  streamId TEXT NOT NULL REFERENCES streams(id) ON DELETE CASCADE,
+  streamTimeMs BIGINT NOT NULL,
+  serverTimeMs BIGINT NOT NULL,
   type TEXT NOT NULL,
   platform TEXT NOT NULL,
-  watchTimeMs INTEGER NOT NULL DEFAULT 0,
+  watchTimeMs BIGINT NOT NULL DEFAULT 0,
   batchId TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_reactions_stream_time ON reactions(streamId, serverTimeMs);
 
 CREATE TABLE IF NOT EXISTS moments (
   id TEXT PRIMARY KEY,
-  streamId TEXT NOT NULL REFERENCES streams(id),
+  streamId TEXT NOT NULL REFERENCES streams(id) ON DELETE CASCADE,
   creatorId TEXT NOT NULL REFERENCES users(id),
   state TEXT NOT NULL,
-  spikeStreamTimeMs INTEGER NOT NULL,
-  detectedAt INTEGER NOT NULL,
-  confirmedAt INTEGER,
-  clip TEXT NOT NULL,        -- json
-  metrics TEXT NOT NULL,     -- json
-  settlement TEXT,           -- json (bigints as strings)
-  cooldownUntil INTEGER,
-  createdAt INTEGER NOT NULL,
-  updatedAt INTEGER NOT NULL
+  spikeStreamTimeMs BIGINT NOT NULL,
+  detectedAt BIGINT NOT NULL,
+  confirmedAt BIGINT,
+  clip TEXT NOT NULL,
+  metrics TEXT NOT NULL,
+  settlement TEXT,
+  cooldownUntil BIGINT,
+  createdAt BIGINT NOT NULL,
+  updatedAt BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_moments_stream ON moments(streamId);
 CREATE INDEX IF NOT EXISTS idx_moments_state ON moments(state);
 
 CREATE TABLE IF NOT EXISTS moment_views (
-  momentId TEXT PRIMARY KEY REFERENCES moments(id),
-  count INTEGER NOT NULL DEFAULT 0
+  momentId TEXT NOT NULL REFERENCES moments(id) ON DELETE CASCADE,
+  viewerKey TEXT NOT NULL,
+  viewedAt BIGINT NOT NULL,
+  PRIMARY KEY (momentId, viewerKey)
 );
+CREATE INDEX IF NOT EXISTS idx_moment_views_time ON moment_views(momentId, viewedAt);
 
 CREATE TABLE IF NOT EXISTS founding_curators (
-  momentId TEXT NOT NULL REFERENCES moments(id),
-  userId TEXT NOT NULL REFERENCES users(id),
+  momentId TEXT NOT NULL REFERENCES moments(id) ON DELETE CASCADE,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   walletAddress TEXT NOT NULL,
   rank INTEGER NOT NULL,
-  qualifyingStreamTimeMs INTEGER NOT NULL,
-  qualifyingServerTimeMs INTEGER NOT NULL,
+  qualifyingStreamTimeMs BIGINT NOT NULL,
+  qualifyingServerTimeMs BIGINT NOT NULL,
   rewardUnits TEXT NOT NULL DEFAULT '0',
   PRIMARY KEY (momentId, userId)
 );
@@ -98,13 +183,95 @@ CREATE INDEX IF NOT EXISTS idx_curators_user ON founding_curators(userId);
 
 CREATE TABLE IF NOT EXISTS reaction_batches (
   id TEXT PRIMARY KEY,
-  streamId TEXT NOT NULL REFERENCES streams(id),
-  fromServerTimeMs INTEGER NOT NULL,
-  toServerTimeMs INTEGER NOT NULL,
+  streamId TEXT NOT NULL REFERENCES streams(id) ON DELETE CASCADE,
+  fromServerTimeMs BIGINT NOT NULL,
+  toServerTimeMs BIGINT NOT NULL,
   reactionCount INTEGER NOT NULL,
   commitment TEXT NOT NULL,
   chainStatus TEXT NOT NULL,
   txHash TEXT,
-  createdAt INTEGER NOT NULL
+  createdAt BIGINT NOT NULL
 );
-`);
+
+CREATE TABLE IF NOT EXISTS reports (
+  id TEXT PRIMARY KEY,
+  reporterId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  targetType TEXT NOT NULL,
+  targetId TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  details TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  createdAt BIGINT NOT NULL,
+  resolvedAt BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, createdAt);
+
+CREATE TABLE IF NOT EXISTS blocked_users (
+  blockerId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  blockedId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  createdAt BIGINT NOT NULL,
+  PRIMARY KEY (blockerId, blockedId)
+);
+
+CREATE TABLE IF NOT EXISTS account_deletion_jobs (
+  id TEXT PRIMARY KEY,
+  userId TEXT UNIQUE NOT NULL,
+  privyId TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  lastError TEXT,
+  createdAt BIGINT NOT NULL,
+  updatedAt BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_account_deletion_status ON account_deletion_jobs(status, updatedAt);
+`;
+
+export async function migrateDatabase(): Promise<void> {
+  if (db.dialect === "sqlite") {
+    const sqlite = db as DatabaseClient;
+    const legacyColumns = await sqlite.query<{ name: string }>("PRAGMA table_info(moment_views)");
+    if (legacyColumns.length > 0 && !legacyColumns.some((column) => column.name === "viewerKey")) {
+      await sqlite.transaction(async (transaction) => {
+        await transaction.execute("ALTER TABLE moment_views RENAME TO moment_views_legacy");
+        await transaction.execute(`CREATE TABLE moment_views (
+          momentId TEXT NOT NULL REFERENCES moments(id) ON DELETE CASCADE,
+          viewerKey TEXT NOT NULL,
+          viewedAt BIGINT NOT NULL,
+          PRIMARY KEY (momentId, viewerKey)
+        )`);
+        const legacy = await transaction.query<{ momentId: string; count: number }>(
+          "SELECT momentId, count FROM moment_views_legacy"
+        );
+        const migratedAt = Date.now();
+        for (const row of legacy) {
+          for (let index = 0; index < Number(row.count); index++) {
+            await transaction.execute(
+              "INSERT INTO moment_views (momentId, viewerKey, viewedAt) VALUES ($1, $2, $3)",
+              [row.momentId, `legacy:${index}`, migratedAt]
+            );
+          }
+        }
+        await transaction.execute("DROP TABLE moment_views_legacy");
+      });
+    }
+    for (const statement of schema.split(";").map((part) => part.trim()).filter(Boolean)) {
+      await sqlite.execute(statement);
+    }
+    const streamColumns = await sqlite.query<{ name: string }>("PRAGMA table_info(streams)");
+    if (!streamColumns.some((column) => column.name === "recordingStartedAt")) {
+      await sqlite.execute("ALTER TABLE streams ADD COLUMN recordingStartedAt BIGINT");
+    }
+    return;
+  }
+  await db.execute(schema);
+  await db.execute("ALTER TABLE streams ADD COLUMN IF NOT EXISTS recordingStartedAt BIGINT");
+}
+
+export async function databaseReady(): Promise<boolean> {
+  try {
+    const rows = await db.query<{ ok: number }>("SELECT 1 AS ok");
+    return Number(rows[0]?.ok) === 1;
+  } catch {
+    return false;
+  }
+}

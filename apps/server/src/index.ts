@@ -1,28 +1,52 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
+import rateLimit from "@fastify/rate-limit";
+import sensible from "@fastify/sensible";
 import websocket from "@fastify/websocket";
-import { env, chainConfigured } from "./env.js";
-import "./db.js";
+import { env, chainConfigured, privyConfigured, livekitConfigured, envioConfigured } from "./env.js";
+import { databaseReady, db, migrateDatabase } from "./db.js";
 import { registerRoutes } from "./routes.js";
 import { tick } from "./momentEngine.js";
 import { seedIfEmpty, driveBots } from "./seed.js";
 import { hub, type SocketLike } from "./realtime.js";
 import { verifyToken } from "./auth.js";
 import { getChain } from "./chain.js";
+import { processPendingAccountDeletions } from "./accountDeletion.js";
 
 async function main() {
   const app = Fastify({ logger: { level: "warn" } });
-  await app.register(cors, { origin: true });
+  const allowedOrigins = new Set(
+    env.IS_PRODUCTION
+      ? env.CORS_ORIGINS
+      : [...env.CORS_ORIGINS, env.PUBLIC_WEB_URL, "http://localhost:5173", "http://127.0.0.1:5173"]
+  );
+  await app.register(helmet, { contentSecurityPolicy: false });
+  await app.register(sensible);
+  await app.register(rateLimit, { max: 300, timeWindow: "1 minute" });
+  await app.register(cors, {
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+      callback(new Error("Origin not allowed"), false);
+    },
+    credentials: true,
+  });
   await app.register(websocket);
+
+  await migrateDatabase();
+  if (!(await databaseReady())) throw new Error("Database readiness check failed after migration.");
 
   await registerRoutes(app);
 
   // Realtime endpoint. Clients subscribe to streams + their own user channel.
   app.get("/ws", { websocket: true }, (socket: SocketLike, req) => {
+    const origin = req.headers.origin;
+    if (origin && !allowedOrigins.has(origin)) {
+      socket.close(1008, "Origin not allowed");
+      return;
+    }
     const url = new URL(req.url ?? "/ws", "http://localhost");
-    const token = url.searchParams.get("token");
-    const userId = token ? verifyToken(token)?.userId ?? null : null;
-    const conn = hub.add(socket, userId);
+    const conn = hub.add(socket, null);
 
     const initialStream = url.searchParams.get("stream");
     if (initialStream) hub.subscribe(conn, initialStream);
@@ -30,22 +54,32 @@ async function main() {
     socket.on("message", (raw: any) => {
       try {
         const msg = JSON.parse(raw.toString());
-        if (msg.type === "subscribe" && msg.streamId) hub.subscribe(conn, msg.streamId);
+        if (msg.type === "auth" && typeof msg.token === "string") {
+          const claims = verifyToken(msg.token);
+          if (!claims) return socket.send(JSON.stringify({ t: "auth", ok: false }));
+          hub.authenticate(conn, claims.userId);
+          socket.send(JSON.stringify({ t: "auth", ok: true }));
+        } else if (msg.type === "subscribe" && msg.streamId) hub.subscribe(conn, msg.streamId);
         else if (msg.type === "unsubscribe" && msg.streamId) hub.unsubscribe(conn, msg.streamId);
       } catch {
         /* ignore malformed frames */
       }
     });
-    socket.send(JSON.stringify({ t: "hello", serverTime: Date.now(), authed: Boolean(userId) }));
+    socket.send(JSON.stringify({ t: "hello", serverTime: Date.now(), authed: false }));
   });
 
-  if (env.ENABLE_SEED) seedIfEmpty();
+  if (env.ENABLE_SEED) await seedIfEmpty();
 
   await app.listen({ port: env.PORT, host: env.HOST });
+  void processPendingAccountDeletions().catch((e) => console.error("account deletion retry error", e));
 
   const chain = getChain();
-  console.log(`\n  Moment backend on http://${env.HOST}:${env.PORT}`);
-  console.log(`  Settlement: ${chain.enabled ? "REAL Monad transactions" : "local simulation (no RPC/key configured)"}`);
+  console.log(`\n  ENNOIA backend on http://${env.HOST}:${env.PORT}`);
+  console.log(`  Database:   ${db.dialect === "postgres" ? "Neon PostgreSQL" : "local SQLite (development only)"}`);
+  console.log(`  Auth:       ${privyConfigured() ? "Privy (passkey + embedded wallet)" : "fallback (email + native WebAuthn)"}`);
+  console.log(`  Livestream: ${livekitConfigured() ? "LiveKit rooms" : "fake-live VOD player"}`);
+  console.log(`  Settlement: ${chain.enabled ? `REAL Monad tx (chainId ${env.MONAD_CHAIN_ID})` : "local simulation (no RPC/key configured)"}`);
+  console.log(`  Analytics:  ${envioConfigured() ? "Envio indexer" : "database aggregates"}`);
   if (!chainConfigured() && chain.enabled) console.log("  (chain enabled via deployments file)");
   console.log("");
 
@@ -54,14 +88,14 @@ async function main() {
     tick().catch((e) => console.error("tick error", e));
   }, 1000);
 
+  setInterval(() => {
+    void processPendingAccountDeletions().catch((e) => console.error("account deletion retry error", e));
+  }, 60_000);
+
   // Demo participant driver.
   if (env.ENABLE_SEED) {
     setInterval(() => {
-      try {
-        driveBots(Date.now());
-      } catch (e) {
-        console.error("driveBots error", e);
-      }
+      void driveBots(Date.now()).catch((e) => console.error("driveBots error", e));
     }, 500);
   }
 }

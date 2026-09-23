@@ -14,9 +14,18 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),
   path.resolve(workspaceRoot, "node_modules"),
 ];
-// Do NOT disable hierarchical lookup: Metro must be able to walk into pnpm's .pnpm store to
-// resolve a package's own dependencies (transitive deps). Keep symlink resolution on.
-config.resolver.unstable_enableSymlinks = true;
-config.resolver.unstable_enablePackageExports = true;
+// Expo SDK 57 enables package exports and symlink support by default. Privy's dependencies
+// still need targeted conditions for packages whose export maps are not React Native-safe.
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === "isows" || moduleName.startsWith("zustand")) {
+    const next = { ...context, unstable_enablePackageExports: false };
+    return next.resolveRequest(next, moduleName, platform);
+  }
+  if (moduleName === "jose") {
+    const next = { ...context, unstable_conditionNames: ["browser"] };
+    return next.resolveRequest(next, moduleName, platform);
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
 
 module.exports = config;

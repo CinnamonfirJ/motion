@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master, envio]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm test:contracts
+      - run: pnpm --filter @ennoia/web build
+      - run: pnpm --filter @ennoia/server build
+      - run: pnpm --filter @ennoia/indexer codegen
+        env:
+          ENVIO_MONAD_RPC_URL: https://testnet-rpc.monad.xyz
+          ENVIO_MOMENT_REWARDS_ADDRESS: "0x0000000000000000000000000000000000000001"

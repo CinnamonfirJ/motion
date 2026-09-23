@@ -28,7 +28,7 @@ export function PlusRule({ className = "" }: { className?: string }) {
   );
 }
 
-/** Section index marker, e.g. `[ 01 OF 08 ] · WHY MOMENT`. */
+/** Section index marker, e.g. `[ 01 OF 08 ] · WHY ENNOIA`. */
 export function SectionIndex({ index, total = 6, label }: { index: number; total?: number; label: string }) {
   const p = (n: number) => String(n).padStart(2, "0");
   return (

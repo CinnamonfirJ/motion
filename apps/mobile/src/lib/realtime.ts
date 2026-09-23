@@ -1,5 +1,5 @@
 import { api, WS_URL, getToken } from "./api";
-import { computeClockOffset, serverNow } from "@moment/core";
+import { computeClockOffset, serverNow } from "@ennoia/core";
 
 /** WebSocket + authoritative clock (mirrors web). RN provides a global WebSocket. */
 type Handler = (ev: any) => void;
@@ -14,8 +14,9 @@ class Realtime {
   connect() {
     if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) return;
     const token = getToken();
-    this.ws = new WebSocket(`${WS_URL}${token ? `?token=${encodeURIComponent(token)}` : ""}`);
+    this.ws = new WebSocket(WS_URL);
     this.ws.onopen = () => {
+      if (token) this.ws?.send(JSON.stringify({ type: "auth", token }));
       for (const s of this.subscribed) this.ws?.send(JSON.stringify({ type: "subscribe", streamId: s }));
     };
     this.ws.onmessage = (e) => {

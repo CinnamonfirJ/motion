@@ -1,5 +1,5 @@
 /**
- * Per-(stream,user) watch-time tracking for spike eligibility (MOMENT anti-cheat).
+ * Per-(stream,user) watch-time tracking for spike eligibility (ENNOIA anti-cheat).
  * A viewer must accrue SPIKE_CONFIG.minimumWatchSeconds before their reactions count toward
  * a spike. Watch start is set the first time we see a user on a stream (ws subscribe or
  * first reaction), whichever is earlier. In-memory is fine — it's ephemeral realtime state.

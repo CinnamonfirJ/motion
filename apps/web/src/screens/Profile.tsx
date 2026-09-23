@@ -76,6 +76,16 @@ export function Profile() {
       <Button variant="secondary" className="w-full" onClick={logout}>
         Sign out
       </Button>
+      <button
+        className="w-full py-3 text-bodysm text-error"
+        onClick={async () => {
+          if (!window.confirm("Delete your ENNOIA account? This deletes your Privy login and anonymizes offchain activity. Public Monad transactions cannot be erased.")) return;
+          await api.deleteAccount();
+          await logout();
+        }}
+      >
+        Delete account
+      </button>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ScrollView, Text, View, Pressable } from "react-native";
+import { Alert, Linking, ScrollView, Text, View, Pressable } from "react-native";
 import { useSession } from "../session";
 import { api } from "../lib/api";
 import { Avatar, Button, Card } from "../components/ui";
@@ -47,6 +47,22 @@ export function Profile() {
       </Card>
 
       <Button title="Sign out" variant="secondary" onPress={logout} />
+      <View style={{ flexDirection: "row", justifyContent: "center", gap: 20 }}>
+        <Text onPress={() => Linking.openURL(`${process.env.EXPO_PUBLIC_WEB_URL || "https://ennoia.app"}/privacy`)} style={{ color: color.textMuted, ...type.bodysm }}>Privacy</Text>
+        <Text onPress={() => Linking.openURL(`${process.env.EXPO_PUBLIC_WEB_URL || "https://ennoia.app"}/terms`)} style={{ color: color.textMuted, ...type.bodysm }}>Terms</Text>
+      </View>
+      <Button
+        title="Delete account"
+        variant="ghost"
+        onPress={() => Alert.alert(
+          "Delete ENNOIA account?",
+          "This permanently deletes your Privy login and anonymizes offchain activity. Public Monad transactions cannot be erased.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Delete", style: "destructive", onPress: () => { void api.deleteAccount().then(logout); } },
+          ]
+        )}
+      />
     </ScrollView>
   );
 }

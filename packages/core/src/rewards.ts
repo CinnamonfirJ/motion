@@ -11,7 +11,7 @@ export interface RewardDistribution {
   totalUnits: bigint;
   creatorUnits: bigint;
   curatorPoolUnits: bigint;
-  /** Platform cut (MOMENT REWARD_SPLIT — 10% by default). */
+  /** Platform cut (ENNOIA REWARD_SPLIT — 10% by default). */
   platformUnits: bigint;
   /** Per-curator allocation, index i => rank i+1. */
   curatorUnits: bigint[];
@@ -19,7 +19,7 @@ export interface RewardDistribution {
 
 /**
  * Split a Moment's reward pool three ways — creator / Founding-Curator pool / platform —
- * per MOMENT REWARD_SPLIT (70 / 20 / 10). `curatorCount` is the number of confirmed
+ * per ENNOIA REWARD_SPLIT (70 / 20 / 10). `curatorCount` is the number of confirmed
  * Founding Curators (0..N). INVARIANT: creator + curatorPool + platform === total exactly.
  */
 export function distributeReward(

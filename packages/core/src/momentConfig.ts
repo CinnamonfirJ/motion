@@ -1,11 +1,11 @@
 /**
- * MOMENT centralized configuration (spec: "Configuration — centralize / avoid magic numbers").
+ * ENNOIA centralized configuration (spec: "Configuration — centralize / avoid magic numbers").
  *
  * Single source of truth for feature flags, spike detection, curator scoring, success
  * thresholds, reward split, anti-cheat and demo tuning. Imported by the backend engine and
  * (read-only) by clients. Nothing here is scattered through components.
  *
- * Product name is MOMENT; ENNOIA is the internal/lore namespace.
+ * Product name is ENNOIA. A Moment remains the core captured-content object.
  */
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { env, chainConfigured } from "./env.js";
-import type { HashFns } from "@moment/core";
+import type { HashFns } from "@ennoia/core";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -65,7 +65,8 @@ export function getChain(): ChainClient {
     return cached;
   }
 
-  const provider = new ethers.JsonRpcProvider(env.MONAD_RPC_URL);
+  // Pin the network (chainId) so ethers skips auto-detection round-trips against Monad.
+  const provider = new ethers.JsonRpcProvider(env.MONAD_RPC_URL, env.MONAD_CHAIN_ID || undefined);
   const signer = new ethers.Wallet(env.SETTLER_PRIVATE_KEY, provider);
   const contract = new ethers.Contract(address, MINIMAL_ABI, signer);
   cached = {

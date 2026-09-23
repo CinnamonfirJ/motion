@@ -2,7 +2,7 @@ import { deriveWallet, normalizeAuthId } from "./auth.js";
 import { Users, Streams } from "./store.js";
 import { ingestReaction } from "./momentEngine.js";
 import { seedWatch } from "./watch.js";
-import { newEventId, type ReactionType, type Platform, type User } from "@moment/core";
+import { newEventId, type ReactionType, type Platform, type User } from "@ennoia/core";
 
 /**
  * Demo data + participant simulation (PRD §40). Kept fully isolated from product logic:
@@ -66,17 +66,17 @@ function seedBotWatch(): void {
   }
 }
 
-export function seedIfEmpty(): void {
-  if (Streams.all().length > 0) {
-    liveStreamIds = Streams.live().map((s) => s.id);
-    bots = loadBots();
+export async function seedIfEmpty(): Promise<void> {
+  if ((await Streams.all()).length > 0) {
+    liveStreamIds = (await Streams.live()).map((s) => s.id);
+    bots = await loadBots();
     seedBotWatch();
     return;
   }
   const now = Date.now();
-  STREAMS.forEach((s, i) => {
+  for (const [i, s] of STREAMS.entries()) {
     const wallet = deriveWallet(s.authId);
-    const creator = Users.create({
+    const creator = await Users.create({
       authId: s.authId,
       displayName: s.name,
       handle: s.handle,
@@ -85,7 +85,7 @@ export function seedIfEmpty(): void {
       isCreator: true,
     });
     const streamId = `stream_${s.handle}`;
-    Streams.upsert({
+    await Streams.upsert({
       id: streamId,
       creatorId: creator.id,
       title: s.title,
@@ -98,14 +98,14 @@ export function seedIfEmpty(): void {
       createdAt: now,
     });
     liveStreamIds.push(streamId);
-  });
+  }
 
   bots = [];
   for (let i = 0; i < BOT_COUNT; i++) {
-    const authId = normalizeAuthId("seed", `bot${i}@moment.demo`);
+    const authId = normalizeAuthId("seed", `bot${i}@ennoia.demo`);
     const wallet = deriveWallet(authId);
     bots.push(
-      Users.create({
+      await Users.create({
         authId,
         displayName: BOT_NAMES[i % BOT_NAMES.length]!,
         handle: `${BOT_NAMES[i % BOT_NAMES.length]!.toLowerCase()}${i}`,
@@ -127,13 +127,13 @@ export function demoCrowd(): { id: string; displayName: string }[] {
 
 /** Force a spike by sending a dense burst of eligible demo-crowd reactions into the REAL
  *  spike engine (not by directly creating a Moment). */
-export function demoForceSpike(streamId: string, count = 24): number {
+export async function demoForceSpike(streamId: string, count = 24): Promise<number> {
   if (bots.length === 0) return 0;
   seedBotWatch(); // ensure eligibility
   let sent = 0;
   for (let i = 0; i < count; i++) {
     const bot = bots[i % bots.length]!;
-    react(bot, streamId, PLATFORMS[i % PLATFORMS.length]!);
+    await react(bot, streamId, PLATFORMS[i % PLATFORMS.length]!);
     sent++;
   }
   return sent;
@@ -144,10 +144,10 @@ export function demoResetStream(streamId: string): void {
   spikeState.delete(streamId);
 }
 
-function loadBots(): User[] {
+async function loadBots(): Promise<User[]> {
   const out: User[] = [];
   for (let i = 0; i < BOT_COUNT; i++) {
-    const u = Users.byAuthId(normalizeAuthId("seed", `bot${i}@moment.demo`));
+    const u = await Users.byAuthId(normalizeAuthId("seed", `bot${i}@ennoia.demo`));
     if (u) out.push(u);
   }
   return out;
@@ -162,8 +162,8 @@ interface StreamSpikeState {
 }
 const spikeState = new Map<string, StreamSpikeState>();
 
-function react(bot: User, streamId: string, platform: Platform) {
-  ingestReaction(bot, {
+async function react(bot: User, streamId: string, platform: Platform): Promise<void> {
+  await ingestReaction(bot, {
     streamId,
     type: REACTION_TYPES[Math.floor(Math.random() * REACTION_TYPES.length)]!,
     clientStreamTimeMs: 0, // server reconciles to authoritative time
@@ -175,7 +175,7 @@ function react(bot: User, streamId: string, platform: Platform) {
 const PLATFORMS: Platform[] = ["web", "ios", "android"];
 
 /** One driver tick (~500ms). Background chatter + periodic scripted spikes for the demo. */
-export function driveBots(now: number): void {
+export async function driveBots(now: number): Promise<void> {
   if (bots.length === 0) return;
   for (const streamId of liveStreamIds) {
     let st = spikeState.get(streamId);
@@ -187,7 +187,7 @@ export function driveBots(now: number): void {
     // Background chatter: a couple of reactions from random bots.
     if (Math.random() < 0.5) {
       const bot = bots[Math.floor(Math.random() * bots.length)]!;
-      react(bot, streamId, PLATFORMS[Math.floor(Math.random() * PLATFORMS.length)]!);
+      await react(bot, streamId, PLATFORMS[Math.floor(Math.random() * PLATFORMS.length)]!);
     }
 
     // Kick off a scripted spike from a mix of platforms.
@@ -200,7 +200,7 @@ export function driveBots(now: number): void {
       const count = 6;
       for (let i = 0; i < count; i++) {
         const bot = bots[(Math.floor(now / 100) + i) % bots.length]!;
-        react(bot, streamId, PLATFORMS[i % PLATFORMS.length]!);
+        await react(bot, streamId, PLATFORMS[i % PLATFORMS.length]!);
       }
     } else if (st.spikeUntil > 0 && now > st.spikeUntil) {
       st.spikeUntil = 0;

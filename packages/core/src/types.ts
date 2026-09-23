@@ -24,8 +24,10 @@ export type SettlementStatus = "pending" | "submitted" | "confirmed" | "failed";
 
 export interface User {
   id: string;
-  /** Auth identity (email or oauth subject). Never the wallet. */
+  /** Auth identity (email or oauth subject, or `privy:<id>`). Never the wallet. */
   authId: string;
+  /** Privy user id when Privy is the auth source of truth; null for fallback auth. */
+  privyId?: string | null;
   displayName: string;
   handle: string;
   avatarUrl: string | null;
@@ -60,7 +62,7 @@ export interface Reaction {
   /** Server receive time, epoch ms. Authoritative ordering key. */
   serverTimeMs: number;
   type: ReactionType;
-  /** Source platform (a.k.a. `source` in the MOMENT reaction event model). */
+  /** Source platform (a.k.a. `source` in the ENNOIA reaction event model). */
   platform: Platform;
   /** Accrued continuous watch time (ms) when the reaction landed — drives eligibility. */
   watchTimeMs: number;

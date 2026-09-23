@@ -18,7 +18,7 @@ export function Button({
   const base =
     "group relative inline-flex items-center justify-center gap-2 min-h-[46px] px-5 font-mono text-label uppercase tracking-[0.14em] transition-all duration-quick disabled:opacity-40 disabled:pointer-events-none";
   const styles = {
-    // MOMENT primary: brand purple (--color-9) with white text; hover --color-13.
+    // ENNOIA primary: brand purple (--color-9) with white text; hover --color-13.
     primary: "bg-brand text-white hover:bg-brandHover active:bg-brandPressed active:translate-y-px",
     secondary: "bg-transparent text-text hover:bg-surface2 active:translate-y-px",
     ghost: "bg-transparent text-text-secondary hover:text-text",

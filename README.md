@@ -1,8 +1,8 @@
-# Moment
+# ENNOIA
 
 > Spot the livestream moment before everyone else — and get paid for being early.
 
-Moment turns real-time audience reactions into **paid curation**. Viewers ("Scouts") watch
+ENNOIA turns real-time audience reactions into **paid curation**. Viewers ("Scouts") watch
 live streams and react. When reactions spike, the backend detects a **Moment**, captures a
 35-second clip (15s before + 20s after), confirms it against the crowd, names the earliest
 qualifying Scouts as **Founding Curators**, and settles rewards to the creator and curators
@@ -26,11 +26,12 @@ clients stay thin and never re-implement business logic per platform (PRD §9, �
 
 | Package | What it is | Notes |
 |---|---|---|
-| `packages/core` | **Shared TypeScript logic**: spike detection, confirmation, Founding-Curator selection, reward math, Moment state machine, stream clock, Merkle batch commitment, config. | Framework-agnostic, no I/O. Imported by the backend **and** every client. 31 unit tests. |
-| `packages/contracts` | **`MomentRewards.sol`** on Monad: `commitReactionBatch` + idempotent `settleMoment`. | Hardhat. 6 tests incl. duplicate-settlement protection. |
-| `apps/server` | **Backend** (Fastify + WebSocket + `node:sqlite`): authoritative stream clock, reactions, Moment engine, Monad settlement, earnings, realtime, demo seed. | Owns all product-critical state. |
+| `packages/core` | **Shared TypeScript logic**: spike detection, confirmation, Founding-Curator selection, reward math, Moment state machine, stream clock, Merkle batch commitment, config. | Framework-agnostic, no I/O. Imported by the backend **and** every client. 42 unit tests. |
+| `packages/contracts` | **`MomentRewards.sol`** on Monad: commitments, Moments, tips, and idempotent settlement. | Hardhat. 8 tests incl. duplicate-settlement protection. |
+| `packages/indexer` | **Envio HyperIndex** for `MomentRewards` events, rolling creator/curator/stream analytics and GraphQL. | Run under Linux/WSL; the app falls back to SQLite when unavailable. |
+| `apps/server` | **Backend** (Fastify + WebSocket + Neon PostgreSQL): authoritative stream clock, reactions, LiveKit/R2 clips, Moment engine, Monad settlement, earnings, realtime, safety. | Owns all product-critical state. SQLite is development-only. |
 | `apps/web` | **Web app** (Vite + React + Tailwind). | Design tokens from `PRODUCT-DESIGN.md`. |
-| `apps/mobile` | **iOS + Android** (Expo / React Native). | One codebase, imports `@moment/core`. |
+| `apps/mobile` | **iOS + Android** (Expo / React Native). | One codebase, imports `@ennoia/core`. |
 
 **Why this shape:** the PRD's hardest risks are (1) the rolling clip buffer, (2) one
 authoritative stream clock, and (3) building the same feature three times. All three are
@@ -39,7 +40,7 @@ and making clients render state they receive over REST + WebSocket.
 
 ### The authoritative stream clock
 Every stream has a server-authoritative `startedAt`. Playback position, reaction
-timestamps, spike detection and clipping all derive from it (`@moment/core/time`). Clients
+timestamps, spike detection and clipping all derive from it (`@ennoia/core/time`). Clients
 measure a clock offset (NTP-style midpoint) and never trust their own wall clock. Mobile
 resynchronizes on foreground.
 
@@ -48,10 +49,24 @@ resynchronizes on foreground.
 (plus `EXPIRED` for candidates that fail confirmation). Transitions are validated; a Moment
 can never settle before it confirms, and settlement is idempotent on-chain and in the engine.
 
-### Invisible crypto
-Sign-in derives an **embedded wallet** deterministically from the auth identity, identical
-across web/iOS/Android. No seed phrase, no network switching, no gas prompts. Blockchain
-terms appear only behind **"View onchain receipt"**.
+### Auth, streaming and indexing
+`APP_MODE=development` permits the zero-credential local demo. `APP_MODE=production`
+fails startup unless Neon, Privy, LiveKit, R2, Monad, Envio, CORS, and signing configuration
+are all present; production never silently falls back to mocks.
+
+- **Privy** is the production source of truth for passkey authentication and the user's
+  embedded EVM wallet. The backend verifies Privy access tokens, maps the Privy identity into
+  the existing user/session model, and disables legacy auth routes while Privy is configured.
+- **LiveKit** carries real room audio/video. LiveKit Egress records HLS segments into
+  **Cloudflare R2**, and the backend creates permanent 15-second pre-roll + 20-second
+  post-roll Moment playlists. Clients receive only short-lived room tokens.
+- **Monad** records economically meaningful activity through `MomentRewards.sol`: reaction
+  commitments, Moments, Founding Curators, tips and reward settlement.
+- **Envio** indexes those contract events for feeds, leaderboards and reward analytics. It is
+  never used as the application database; Neon owns profiles, streams and raw reactions.
+
+When Privy is absent, the original WebAuthn/email plus deterministic-wallet path is available
+for local demo use only. See [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) for setup.
 
 ---
 
@@ -73,8 +88,8 @@ pnpm dev:web                    # web on http://localhost:5173
 pnpm dev:mobile                 # Expo — press i (iOS), a (Android), or scan the QR
 ```
 
-Open the web app, sign in with any email (or "Continue with Google" for a random demo
-account), open a live stream, and react. Seeded bot Scouts drive periodic spikes, so a
+Open the web app, sign in with a passkey or email in fallback mode, open a live stream, and
+react. Seeded bot Scouts drive periodic spikes, so a
 Moment forms within a minute — you'll see **MOMENT DETECTED**, and if you reacted early
 enough, the **Founding Curator** celebration, then the settled reward in **Earnings**.
 
@@ -85,7 +100,7 @@ enough, the **Founding Curator** celebration, then the settled reward in **Earni
 ### Tests
 
 ```bash
-pnpm test                       # @moment/core (spike, curators, rewards, state machine, clock)
+pnpm test                       # @ennoia/core (spike, curators, rewards, state machine, clock)
 pnpm test:contracts             # MomentRewards.sol (settlement, idempotency, access)
 ```
 
@@ -121,24 +136,31 @@ per reaction.
 
 ## Environment variables
 
-See `.env.example` for the full list. Nothing is required for the local simulation demo.
+See `.env.example` for an overview and each app's own `.env.example` for the complete list.
+Nothing is required for the local simulation demo. Only `VITE_*` and `EXPO_PUBLIC_*` values
+may be exposed to clients; Privy, LiveKit and signing secrets are server-only.
 
 | Variable | Used by | Purpose |
 |---|---|---|
-| `PORT`, `HOST`, `JWT_SECRET`, `DB_PATH` | server | Basic backend config. |
-| `WALLET_MASTER_MNEMONIC` | server | Derives embedded wallets. **Set a real secret in shared envs.** |
+| `APP_MODE`, `PORT`, `HOST`, `PUBLIC_WEB_URL`, `CORS_ORIGINS`, `JWT_SECRET`, `DATABASE_URL` | server | Runtime mode, origins, sessions, and Neon database. |
+| `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `PRIVY_VERIFICATION_KEY` | server | Verify Privy users and embedded wallets. |
+| `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | server | Mint scoped host/viewer room tokens. |
+| `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL` | server | LiveKit Egress and permanent Moment storage. |
+| `ENVIO_GRAPHQL_URL` | server | Read indexed analytics; blank uses SQLite fallback. |
+| `WALLET_MASTER_MNEMONIC` | server | Fallback-only deterministic wallets. **Set a real secret in shared demo envs.** |
 | `UNITS_PER_USD` | server | Display peg (units→USD). Does not affect on-chain amounts. |
 | `ENABLE_SEED` | server | Demo streams + bot participants (default `true`). |
 | `MONAD_RPC_URL`, `MOMENT_REWARDS_ADDRESS`, `SETTLER_PRIVATE_KEY` | server | Enable real Monad settlement. |
 | `DEPLOYER_PRIVATE_KEY`, `FUND_AMOUNT_ETHER`, `SETTLER_ADDRESS` | contracts | Deploy + fund. |
 | `VITE_API_URL`, `VITE_WS_URL` | web | Backend endpoints. |
+| `VITE_PRIVY_APP_ID`, `VITE_PRIVY_CLIENT_ID` | web | Public Privy identifiers (never the app secret). |
+| `VITE_LIVEKIT_URL` | web | Public LiveKit WebSocket URL; room token still comes from server. |
 | `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_WS_URL` | mobile | Backend endpoints (use LAN IP). |
 
 ---
 
 ## Configuration (thresholds & rewards)
 
-All tunables live in **`packages/core/src/config.ts`** (`DEFAULT_CONFIG`) — no magic numbers
-scattered through the app. Spike windows/multiplier, confirmation thresholds, clip pre/post
-roll, Founding-Curator count + rank weights (5/4/3/2/1), and the 70/30 creator/curator split
-are all here and overridable via `makeConfig()`.
+All tunables live in **`packages/core/src/config.ts`** and **`momentConfig.ts`**. Spike windows,
+confirmation thresholds, 15s/20s clipping, Founding-Curator scoring, anti-cheat, and the
+70% creator / 20% curator / 10% platform split are centralized there.
