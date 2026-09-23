@@ -143,7 +143,7 @@ may be exposed to clients; Privy, LiveKit and signing secrets are server-only.
 | Variable | Used by | Purpose |
 |---|---|---|
 | `APP_MODE`, `PORT`, `HOST`, `PUBLIC_WEB_URL`, `CORS_ORIGINS`, `JWT_SECRET`, `DATABASE_URL` | server | Runtime mode, origins, sessions, and Neon database. |
-| `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `PRIVY_VERIFICATION_KEY` | server | Verify Privy users and embedded wallets. |
+| `PRIVY_APP_ID`, `PRIVY_APP_SECRET` | server | Verify Privy users and embedded wallets. Optional `PRIVY_VERIFICATION_KEY` enables offline verification. |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | server | Mint scoped host/viewer room tokens. |
 | `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL` | server | LiveKit Egress and permanent Moment storage. |
 | `ENVIO_GRAPHQL_URL` | server | Read indexed analytics; blank uses SQLite fallback. |
@@ -154,8 +154,7 @@ may be exposed to clients; Privy, LiveKit and signing secrets are server-only.
 | `DEPLOYER_PRIVATE_KEY`, `FUND_AMOUNT_ETHER`, `SETTLER_ADDRESS` | contracts | Deploy + fund. |
 | `VITE_API_URL`, `VITE_WS_URL` | web | Backend endpoints. |
 | `VITE_PRIVY_APP_ID`, `VITE_PRIVY_CLIENT_ID` | web | Public Privy identifiers (never the app secret). |
-| `VITE_LIVEKIT_URL` | web | Public LiveKit WebSocket URL; room token still comes from server. |
-| `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_WS_URL` | mobile | Backend endpoints (use LAN IP). |
+| `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_WS_URL` | mobile | Backend endpoints (use LAN IP locally, Render URL in release builds). |
 
 ---
 

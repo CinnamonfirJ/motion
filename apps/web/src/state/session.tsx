@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { api, flushReactionQueue, setToken, getToken, type UnsignedTransactionDTO, type UserDTO } from "../lib/api";
 import { realtime } from "../lib/realtime";
 import { registerPasskey, loginPasskey } from "../lib/passkey";
-import { useLoginWithPasskey, usePrivy, useSendTransaction, useSignupWithPasskey, useWallets } from "@privy-io/react-auth";
+import { useCreateWallet, useLoginWithPasskey, usePrivy, useSendTransaction, useSignupWithPasskey, useWallets, type User as PrivyUser } from "@privy-io/react-auth";
 
 const PRIVY_ENABLED = Boolean(import.meta.env.VITE_PRIVY_APP_ID?.trim());
 
@@ -81,20 +81,29 @@ function PrivySessionProvider({ children }: { children: ReactNode }) {
   const { user, setUser, establish } = useAppSessionState();
   const [loading, setLoading] = useState(true);
   const privy = usePrivy();
-  const { loginWithPasskey } = useLoginWithPasskey();
-  const { signupWithPasskey } = useSignupWithPasskey();
+  const loginComplete = useRef<((user: PrivyUser) => void) | null>(null);
+  const authFlowInProgress = useRef(false);
+  const onComplete = ({ user: completedUser }: { user: PrivyUser }) => loginComplete.current?.(completedUser);
+  const { loginWithPasskey } = useLoginWithPasskey({ onComplete });
+  const { signupWithPasskey } = useSignupWithPasskey({ onComplete });
+  const { createWallet } = useCreateWallet();
   const { sendTransaction: sendPrivyTransaction } = useSendTransaction();
   const { wallets } = useWallets();
   const exchangeInFlight = useRef<Promise<void> | null>(null);
-  const pendingDisplayName = useRef<string | undefined>(undefined);
 
-  const exchange = (displayName?: string): Promise<void> => {
+  const exchange = (displayName?: string, completedUser?: PrivyUser): Promise<void> => {
     if (exchangeInFlight.current) return exchangeInFlight.current;
-    const requestedDisplayName = displayName ?? pendingDisplayName.current;
     const pending = (async () => {
+      const currentUser = completedUser ?? privy.user;
+      if (!currentUser) throw new Error("privy-user-unavailable");
+      const hasEmbeddedEvmWallet = currentUser.linkedAccounts.some(
+        (account) => account.type === "wallet" && account.chainType === "ethereum" &&
+          (account.walletClientType === "privy" || account.walletClientType === "privy-v2")
+      );
+      if (!hasEmbeddedEvmWallet) await createWallet();
       const accessToken = await privy.getAccessToken();
       if (!accessToken) throw new Error("privy-access-token-unavailable");
-      const session = await api.privy(accessToken, requestedDisplayName);
+      const session = await api.privy(accessToken, displayName);
       await establish(session.token, session.user);
     })();
     exchangeInFlight.current = pending;
@@ -118,32 +127,36 @@ function PrivySessionProvider({ children }: { children: ReactNode }) {
             return;
           }
         }
-        if (privy.authenticated && !cancelled) await exchange();
+        if (privy.authenticated && privy.user && !authFlowInProgress.current && !cancelled) await exchange();
       } catch {
         setToken(null);
-        if (privy.authenticated && !cancelled) {
-          try { await exchange(); } catch { /* sign-in screen will offer a retry */ }
-        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [privy.ready, privy.authenticated]);
+  }, [privy.ready, privy.authenticated, privy.user?.id]);
 
-  const signInPasskey = async () => {
-    await loginWithPasskey();
-    await exchange();
-  };
-  const createPasskey = async (displayName: string) => {
-    pendingDisplayName.current = displayName;
+  const completePasskeyFlow = async (start: () => Promise<void>, displayName?: string) => {
+    authFlowInProgress.current = true;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const completed = new Promise<PrivyUser>((resolve, reject) => {
+      loginComplete.current = resolve;
+      timeout = setTimeout(() => reject(new Error("privy-login-completion-timeout")), 20_000);
+    });
+    // Passkey cancellation can precede the completion callback; keep that pending promise handled.
+    void completed.catch(() => undefined);
     try {
-      await signupWithPasskey();
-      await exchange(displayName);
+      await start();
+      await exchange(displayName, await completed);
     } finally {
-      pendingDisplayName.current = undefined;
+      clearTimeout(timeout);
+      loginComplete.current = null;
+      authFlowInProgress.current = false;
     }
   };
+  const signInPasskey = () => completePasskeyFlow(loginWithPasskey);
+  const createPasskey = (displayName: string) => completePasskeyFlow(signupWithPasskey, displayName);
   const login = async () => {
     throw new Error("Use a Privy passkey to sign in.");
   };

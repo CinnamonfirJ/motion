@@ -3,7 +3,7 @@ services:
     name: ennoia-api
     runtime: node
     plan: free
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @ennoia/core build && pnpm --filter @ennoia/server build
+    buildCommand: corepack pnpm install --frozen-lockfile && corepack pnpm --filter @ennoia/core build && corepack pnpm --filter @ennoia/server build
     startCommand: pnpm --filter @ennoia/server start:prod
     healthCheckPath: /health
     autoDeployTrigger: commit
