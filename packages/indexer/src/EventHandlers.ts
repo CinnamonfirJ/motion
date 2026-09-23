@@ -1,20 +1,19 @@
 /**
  * Envio event handlers for MomentRewards on Monad.
  *
- * `generated` is produced by `pnpm codegen` (envio codegen) from config.yaml + schema.graphql —
- * it does not exist until you run codegen, so a red import here before codegen is expected.
+ * Types are produced by `pnpm codegen` from config.yaml + schema.graphql.
  *
  * Handlers keep two kinds of records:
  *   • per-event rows (Moment, Tip, Settlement, CuratorPayout, ReactionBatch, FoundingCurator)
  *   • rolling aggregates (CuratorStats, CreatorStats, StreamStats) for leaderboards/analytics.
  * The backend (apps/server/src/envio.ts) queries these; it never writes here.
  */
-import { MomentRewards } from "generated";
+import { indexer } from "envio";
 
 const lc = (a: string) => a.toLowerCase();
 
 // ---- MomentCreated: a Moment (+ its Founding Curators) recorded on-chain ----
-MomentRewards.MomentCreated.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: "MomentRewards", event: "MomentCreated" }, async ({ event, context }) => {
   const id = event.params.momentId;
   context.Moment.set({
     id,
@@ -51,7 +50,7 @@ MomentRewards.MomentCreated.handler(async ({ event, context }) => {
 });
 
 // ---- FoundingCuratorRecorded: rank i+1 curator for a Moment ----
-MomentRewards.FoundingCuratorRecorded.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: "MomentRewards", event: "FoundingCuratorRecorded" }, async ({ event, context }) => {
   const curator = lc(event.params.curator);
   const rank = Number(event.params.rank);
   context.FoundingCurator.set({
@@ -71,7 +70,7 @@ MomentRewards.FoundingCuratorRecorded.handler(async ({ event, context }) => {
 });
 
 // ---- Tipped: funds a stream's reward pool ----
-MomentRewards.Tipped.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: "MomentRewards", event: "Tipped" }, async ({ event, context }) => {
   context.Tip.set({
     id: `${event.transaction.hash}-${event.logIndex}`,
     streamId: event.params.streamId,
@@ -102,7 +101,7 @@ MomentRewards.Tipped.handler(async ({ event, context }) => {
 });
 
 // ---- MomentSettled: creator paid; marks the Moment settled ----
-MomentRewards.MomentSettled.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: "MomentRewards", event: "MomentSettled" }, async ({ event, context }) => {
   const id = event.params.momentId;
   context.Settlement.set({
     id,
@@ -136,7 +135,7 @@ MomentRewards.MomentSettled.handler(async ({ event, context }) => {
 });
 
 // ---- CuratorPaid: a Founding Curator's payout ----
-MomentRewards.CuratorPaid.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: "MomentRewards", event: "CuratorPaid" }, async ({ event, context }) => {
   const curator = lc(event.params.curator);
   context.CuratorPayout.set({
     id: `${event.params.momentId}-${curator}`,
@@ -157,7 +156,7 @@ MomentRewards.CuratorPaid.handler(async ({ event, context }) => {
 });
 
 // ---- PlatformPaid: protocol treasury payout history ----
-MomentRewards.PlatformPaid.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: "MomentRewards", event: "PlatformPaid" }, async ({ event, context }) => {
   const platform = lc(event.params.platform);
   context.PlatformPayout.set({
     id: `${event.params.momentId}-${platform}`,
@@ -169,7 +168,7 @@ MomentRewards.PlatformPaid.handler(async ({ event, context }) => {
 });
 
 // ---- ReactionBatchCommitted: reaction provenance anchor ----
-MomentRewards.ReactionBatchCommitted.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: "MomentRewards", event: "ReactionBatchCommitted" }, async ({ event, context }) => {
   context.ReactionBatch.set({
     id: event.params.batchId,
     streamId: event.params.streamId,
