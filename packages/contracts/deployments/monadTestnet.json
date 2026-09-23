@@ -1,0 +1,711 @@
+{
+  "network": "monadTestnet",
+  "address": "0xF5dBf042aaDb38e4519D2B972C0a4f16C22a20EA",
+  "deployer": "0x3288e87083D9e2Af728864C308a23fee16497132",
+  "abi": [
+    {
+      "type": "constructor",
+      "stateMutability": "undefined",
+      "payable": false,
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "AlreadyCreated",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "AlreadySettled",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BatchAlreadyCommitted",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "InsufficientPool",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "LengthMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "NotOwner",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "NotSettler",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "Reentrancy",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "TooManyCurators",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "TransferFailed",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ZeroAmount",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ZeroCreator",
+      "inputs": []
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "CuratorPaid",
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": "momentId",
+          "indexed": true
+        },
+        {
+          "type": "address",
+          "name": "curator",
+          "indexed": true
+        },
+        {
+          "type": "uint8",
+          "name": "rank",
+          "indexed": false
+        },
+        {
+          "type": "uint256",
+          "name": "amount",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "FoundingCuratorRecorded",
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": "momentId",
+          "indexed": true
+        },
+        {
+          "type": "address",
+          "name": "curator",
+          "indexed": true
+        },
+        {
+          "type": "uint8",
+          "name": "rank",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "MomentCreated",
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": "momentId",
+          "indexed": true
+        },
+        {
+          "type": "bytes32",
+          "name": "streamId",
+          "indexed": true
+        },
+        {
+          "type": "address",
+          "name": "creator",
+          "indexed": true
+        },
+        {
+          "type": "uint64",
+          "name": "clipStart",
+          "indexed": false
+        },
+        {
+          "type": "uint64",
+          "name": "clipEnd",
+          "indexed": false
+        },
+        {
+          "type": "uint8",
+          "name": "category",
+          "indexed": false
+        },
+        {
+          "type": "uint256",
+          "name": "curatorCount",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "MomentSettled",
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": "momentId",
+          "indexed": true
+        },
+        {
+          "type": "address",
+          "name": "creator",
+          "indexed": true
+        },
+        {
+          "type": "uint256",
+          "name": "creatorAmount",
+          "indexed": false
+        },
+        {
+          "type": "uint256",
+          "name": "curatorPool",
+          "indexed": false
+        },
+        {
+          "type": "uint256",
+          "name": "platformAmount",
+          "indexed": false
+        },
+        {
+          "type": "uint256",
+          "name": "curatorCount",
+          "indexed": false
+        },
+        {
+          "type": "uint256",
+          "name": "totalAmount",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "OwnerTransferred",
+      "inputs": [
+        {
+          "type": "address",
+          "name": "from",
+          "indexed": true
+        },
+        {
+          "type": "address",
+          "name": "to",
+          "indexed": true
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "PlatformPaid",
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": "momentId",
+          "indexed": true
+        },
+        {
+          "type": "address",
+          "name": "platform",
+          "indexed": true
+        },
+        {
+          "type": "uint256",
+          "name": "amount",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "PoolFunded",
+      "inputs": [
+        {
+          "type": "address",
+          "name": "from",
+          "indexed": true
+        },
+        {
+          "type": "uint256",
+          "name": "amount",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "ReactionBatchCommitted",
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": "batchId",
+          "indexed": true
+        },
+        {
+          "type": "bytes32",
+          "name": "streamId",
+          "indexed": true
+        },
+        {
+          "type": "uint256",
+          "name": "reactionCount",
+          "indexed": false
+        },
+        {
+          "type": "uint64",
+          "name": "fromTs",
+          "indexed": false
+        },
+        {
+          "type": "uint64",
+          "name": "toTs",
+          "indexed": false
+        },
+        {
+          "type": "bytes32",
+          "name": "commitment",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "SettlerUpdated",
+      "inputs": [
+        {
+          "type": "address",
+          "name": "settler",
+          "indexed": true
+        },
+        {
+          "type": "bool",
+          "name": "allowed",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "Tipped",
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": "streamId",
+          "indexed": true
+        },
+        {
+          "type": "address",
+          "name": "from",
+          "indexed": true
+        },
+        {
+          "type": "uint256",
+          "name": "amount",
+          "indexed": false
+        },
+        {
+          "type": "uint256",
+          "name": "streamTotal",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "batchCommitted",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": ""
+        }
+      ],
+      "outputs": [
+        {
+          "type": "bool",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "commitReactionBatch",
+      "constant": false,
+      "payable": false,
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": "batchId"
+        },
+        {
+          "type": "bytes32",
+          "name": "streamId"
+        },
+        {
+          "type": "uint256",
+          "name": "reactionCount"
+        },
+        {
+          "type": "uint64",
+          "name": "fromTs"
+        },
+        {
+          "type": "uint64",
+          "name": "toTs"
+        },
+        {
+          "type": "bytes32",
+          "name": "commitment"
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "type": "function",
+      "name": "createMoment",
+      "constant": false,
+      "payable": false,
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": "momentId"
+        },
+        {
+          "type": "bytes32",
+          "name": "streamId"
+        },
+        {
+          "type": "address",
+          "name": "creator"
+        },
+        {
+          "type": "uint64",
+          "name": "clipStart"
+        },
+        {
+          "type": "uint64",
+          "name": "clipEnd"
+        },
+        {
+          "type": "uint8",
+          "name": "category"
+        },
+        {
+          "type": "address[]",
+          "name": "curators"
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "type": "function",
+      "name": "fund",
+      "constant": false,
+      "stateMutability": "payable",
+      "payable": true,
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "type": "function",
+      "name": "isMomentSettled",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": "momentId"
+        }
+      ],
+      "outputs": [
+        {
+          "type": "bool",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "momentCreated",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": ""
+        }
+      ],
+      "outputs": [
+        {
+          "type": "bool",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "momentCreatorOf",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": ""
+        }
+      ],
+      "outputs": [
+        {
+          "type": "address",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "momentSettled",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": ""
+        }
+      ],
+      "outputs": [
+        {
+          "type": "bool",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "owner",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "address",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "poolBalance",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "uint256",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "setSettler",
+      "constant": false,
+      "payable": false,
+      "inputs": [
+        {
+          "type": "address",
+          "name": "settler"
+        },
+        {
+          "type": "bool",
+          "name": "allowed"
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "type": "function",
+      "name": "settleMoment",
+      "constant": false,
+      "payable": false,
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": "momentId"
+        },
+        {
+          "type": "address",
+          "name": "creator"
+        },
+        {
+          "type": "uint256",
+          "name": "creatorAmount"
+        },
+        {
+          "type": "address",
+          "name": "platform"
+        },
+        {
+          "type": "uint256",
+          "name": "platformAmount"
+        },
+        {
+          "type": "address[]",
+          "name": "curators"
+        },
+        {
+          "type": "uint256[]",
+          "name": "curatorAmounts"
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "type": "function",
+      "name": "settlers",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [
+        {
+          "type": "address",
+          "name": ""
+        }
+      ],
+      "outputs": [
+        {
+          "type": "bool",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "streamTips",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": ""
+        }
+      ],
+      "outputs": [
+        {
+          "type": "uint256",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "tip",
+      "constant": false,
+      "stateMutability": "payable",
+      "payable": true,
+      "inputs": [
+        {
+          "type": "bytes32",
+          "name": "streamId"
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "type": "function",
+      "name": "totalPaidOut",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "uint256",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "totalSettledMoments",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "uint256",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "totalTips",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "uint256",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "transferOwnership",
+      "constant": false,
+      "payable": false,
+      "inputs": [
+        {
+          "type": "address",
+          "name": "newOwner"
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "type": "receive",
+      "stateMutability": "payable"
+    }
+  ],
+  "deployedAt": "2026-09-23T13:55:49.861Z"
+}
