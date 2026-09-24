@@ -73,11 +73,21 @@ function postgresClient(url: string, existing?: Sql): DatabaseClient {
   return {
     dialect: "postgres",
     async query<T extends Record<string, unknown>>(statement: string, params: Params = []): Promise<T[]> {
-      return (await sql.unsafe(statement, [...params] as never[])) as unknown as T[];
+      const startedAt = performance.now();
+      try {
+        return (await sql.unsafe(statement, [...params] as never[])) as unknown as T[];
+      } finally {
+        logSlowDatabaseOperation(statement, startedAt);
+      }
     },
     async execute(statement: string, params: Params = []): Promise<number> {
-      const result = await sql.unsafe(statement, [...params] as never[]);
-      return result.count;
+      const startedAt = performance.now();
+      try {
+        const result = await sql.unsafe(statement, [...params] as never[]);
+        return result.count;
+      } finally {
+        logSlowDatabaseOperation(statement, startedAt);
+      }
     },
     async transaction<T>(work: (transaction: DatabaseClient) => Promise<T>): Promise<T> {
       return sql.begin(async (transactionSql) => work(postgresClient(url, transactionSql as unknown as Sql))) as Promise<T>;
@@ -86,6 +96,15 @@ function postgresClient(url: string, existing?: Sql): DatabaseClient {
       if (!existing) await sql.end({ timeout: 5 });
     },
   };
+}
+
+function logSlowDatabaseOperation(statement: string, startedAt: number): void {
+  const durationMs = Math.round(performance.now() - startedAt);
+  if (durationMs < 2_000) return;
+  // Do not log SQL parameters, connection strings, or user-supplied values.
+  const operation = statement.trimStart().split(/\s+/, 1)[0]?.toUpperCase() ?? "UNKNOWN";
+  const table = /\b(?:FROM|INTO|UPDATE)\s+([a-z_]+)/i.exec(statement)?.[1] ?? "unknown";
+  console.warn("[db] slow operation", { operation, table, durationMs });
 }
 
 export const db: DatabaseClient = env.DATABASE_URL ? postgresClient(env.DATABASE_URL) : sqliteClient(env.DB_PATH);

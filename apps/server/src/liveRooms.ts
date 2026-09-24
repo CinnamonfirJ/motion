@@ -22,10 +22,10 @@ const roomService = livekitConfigured()
 export const LiveRooms = {
   async state(streamId: string) {
     const [presence] = await db.query<{ hostConnected: boolean | number; hostDisconnectedAt: number | null }>(
-      "SELECT hostConnected, hostDisconnectedAt FROM stream_presence WHERE streamId = $1", [streamId]
+      'SELECT hostConnected AS "hostConnected", hostDisconnectedAt AS "hostDisconnectedAt" FROM stream_presence WHERE streamId = $1', [streamId]
     );
     const speakers = await db.query<{ userId: string; status: SpeakerStatus; canCamera: boolean | number; canScreenShare: boolean | number }>(
-      "SELECT userId, status, canCamera, canScreenShare FROM stream_speakers WHERE streamId = $1 ORDER BY updatedAt DESC", [streamId]
+      'SELECT userId AS "userId", status, canCamera AS "canCamera", canScreenShare AS "canScreenShare" FROM stream_speakers WHERE streamId = $1 ORDER BY updatedAt DESC', [streamId]
     );
     return {
       hostConnected: presence?.hostConnected === true || presence?.hostConnected === 1,
@@ -42,7 +42,7 @@ export const LiveRooms = {
 
   async speaker(streamId: string, userId: string): Promise<SpeakerState | null> {
     const [row] = await db.query<{ userId: string; status: SpeakerStatus; canCamera: boolean | number; canScreenShare: boolean | number }>(
-      "SELECT userId, status, canCamera, canScreenShare FROM stream_speakers WHERE streamId = $1 AND userId = $2", [streamId, userId]
+      'SELECT userId AS "userId", status, canCamera AS "canCamera", canScreenShare AS "canScreenShare" FROM stream_speakers WHERE streamId = $1 AND userId = $2', [streamId, userId]
     );
     return row ? { userId, status: row.status, canCamera: row.canCamera === true || row.canCamera === 1, canScreenShare: row.canScreenShare === true || row.canScreenShare === 1 } : null;
   },
@@ -111,7 +111,7 @@ export const LiveRooms = {
 
   async endExpired() {
     const rows = await db.query<{ streamId: string }>(
-      `SELECT p.streamId FROM stream_presence p JOIN streams s ON s.id = p.streamId
+      `SELECT p.streamId AS "streamId" FROM stream_presence p JOIN streams s ON s.id = p.streamId
        WHERE s.isLive = $1 AND p.hostConnected = $2 AND p.hostDisconnectedAt IS NOT NULL AND p.hostDisconnectedAt <= $3`,
       [true, false, Date.now() - graceMs]
     );

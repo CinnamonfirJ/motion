@@ -36,6 +36,13 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+function speakerPath(streamId: string, userId: string): string {
+  if (typeof userId !== "string" || !userId.trim() || userId === "undefined" || userId === "null") {
+    throw new Error("Speaker identity is missing. Refresh the room and try again.");
+  }
+  return `/streams/${streamId}/speakers/${encodeURIComponent(userId)}`;
+}
+
 export interface UserDTO {
   id: string;
   displayName: string;
@@ -132,7 +139,7 @@ export const api = {
     req<{ token: string; user: UserDTO }>("/auth/privy", { method: "POST", body: JSON.stringify({ accessToken, displayName }) }),
   me: () => req<{ user: UserDTO; wallet: { address: string; network: string; onchain: boolean } }>("/me"),
   streams: () => req<{ streams: StreamDTO[] }>("/streams"),
-  stream: (id: string) => req<{ stream: StreamDTO; sync: SyncDTO; activeMoments: MomentDTO[] }>(`/streams/${id}`),
+  stream: (id: string, signal?: AbortSignal) => req<{ stream: StreamDTO; sync: SyncDTO; activeMoments: MomentDTO[] }>(`/streams/${id}`, { signal }),
   react: (streamId: string, type: string, clientStreamTimeMs: number, eventId: string, platform: string) =>
     req<{ ok: boolean }>("/reactions", { method: "POST", body: JSON.stringify({ streamId, type, clientStreamTimeMs, platform, eventId }) }),
   tip: (streamId: string, amountMon = "0.001") =>
@@ -140,15 +147,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ amountMon }),
     }),
-  livekitToken: (streamId: string) => req<{ url: string; token: string; room: string; role: "host" | "speaker" | "viewer" }>(`/streams/${streamId}/livekit-token`, { method: "POST", body: "{}" }),
+  livekitToken: (streamId: string, signal?: AbortSignal) => req<{ url: string; token: string; room: string; role: "host" | "speaker" | "viewer" }>(`/streams/${streamId}/livekit-token`, { method: "POST", body: "{}", signal }),
   liveRoom: (id: string) => req<LiveRoomDTO>(`/streams/${id}/live-room`),
-  requestMic: (id: string) => req<{ ok: boolean }>(`/streams/${id}/speaker-request`, { method: "POST", body: "{}" }),
-  inviteSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}/invite`, { method: "POST", body: "{}" }),
+  requestMic: (id: string) => req<{ ok: boolean; status: "requested" | "invited" | "approved" }>(`/streams/${id}/speaker-request`, { method: "POST", body: "{}" }),
+  inviteSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`${speakerPath(id, userId)}/invite`, { method: "POST", body: "{}" }),
   acceptSpeakerInvite: (id: string) => req<{ ok: boolean }>(`/streams/${id}/speaker-invite/accept`, { method: "POST", body: "{}" }),
-  approveSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}/approve`, { method: "POST", body: "{}" }),
+  approveSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`${speakerPath(id, userId)}/approve`, { method: "POST", body: "{}" }),
   setSpeakerPermissions: (id: string, userId: string, permissions: { canCamera?: boolean; canScreenShare?: boolean }) =>
-    req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}`, { method: "PATCH", body: JSON.stringify(permissions) }),
-  removeSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}`, { method: "DELETE" }),
+    req<{ ok: boolean }>(speakerPath(id, userId), { method: "PATCH", body: JSON.stringify(permissions) }),
+  removeSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(speakerPath(id, userId), { method: "DELETE" }),
   feed: (mode: "for-you" | "following", before?: number, communityId?: string) =>
     req<{ items: FeedItemDTO[]; nextBefore: number | null }>(`/feed?${new URLSearchParams({ mode, ...(before ? { before: String(before) } : {}), ...(communityId ? { communityId } : {}) })}`),
   post: (id: string) => req<{ post: PostDTO }>(`/posts/${id}`),

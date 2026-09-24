@@ -7,6 +7,7 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
+    "eas-build-post-install": "pnpm --filter @ennoia/core build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,7 +17,7 @@
     "@ethersproject/shims": "^5.8.0",
     "@livekit/react-native": "^2.12.0",
     "@livekit/react-native-expo-plugin": "^1.0.2",
-    "@livekit/react-native-webrtc": "^144.2.0",
+    "@livekit/react-native-webrtc": "144.1.2",
     "@privy-io/expo": "^0.74.2",
     "@privy-io/expo-native-extensions": "^0.0.12",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -49,6 +50,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.0",
+    "babel-preset-expo": "~57.0.12",
     "typescript": "^6.0.3"
   }
 }

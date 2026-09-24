@@ -305,7 +305,7 @@ export async function registerSocialRoutes(app: FastifyInstance, auth: Auth) {
     }
     const rows = await db.query<Row>(
       `${postSelect} WHERE p.deletedAt IS NULL AND p.createdAt < $1
-       AND ($2 IS NULL OR p.communityId = $2)
+       AND (CAST($2 AS TEXT) IS NULL OR p.communityId = $2)
        AND ($3 = 'for-you' OR p.authorId = $4 OR EXISTS
          (SELECT 1 FROM follows f WHERE f.followerId = $4 AND f.followingId = p.authorId))
        ORDER BY p.createdAt DESC LIMIT $5`,

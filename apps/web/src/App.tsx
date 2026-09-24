@@ -1,18 +1,20 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { SessionProvider, useSession } from "./state/session";
 import { Layout } from "./components/Layout";
 import { SignIn } from "./screens/SignIn";
 import { Home } from "./screens/Home";
-import { Live } from "./screens/Live";
 import { Moments } from "./screens/Moments";
 import { MomentDetail } from "./screens/MomentDetail";
 import { Earnings } from "./screens/Earnings";
 import { Profile } from "./screens/Profile";
 import { Demo } from "./screens/Demo";
-import { GoLive } from "./screens/GoLive";
 import { Legal } from "./screens/Legal";
 import { UserProfile } from "./screens/UserProfile";
+
+// Keep the LiveKit studio/player out of the initial feed bundle.
+const Live = lazy(() => import("./screens/Live").then((module) => ({ default: module.Live })));
+const GoLive = lazy(() => import("./screens/GoLive").then((module) => ({ default: module.GoLive })));
 
 function OfflineBanner() {
   const [offline, setOffline] = useState(!navigator.onLine);
@@ -43,6 +45,7 @@ function Gate() {
       </div>
     );
   return (
+    <Suspense fallback={<div className="min-h-screen grid place-items-center bg-night text-text">Loading…</div>}>
     <Routes>
       <Route path="/privacy" element={<Legal kind="privacy" />} />
       <Route path="/terms" element={<Legal kind="terms" />} />
@@ -66,6 +69,7 @@ function Gate() {
         <Route path="*" element={<SignIn />} />
       )}
     </Routes>
+    </Suspense>
   );
 }
 

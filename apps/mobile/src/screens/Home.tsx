@@ -34,11 +34,12 @@ export function Home() {
   }, [mode, selectedCommunity]);
   useEffect(() => {
     setItems(null); setError(null);
+  }, [mode, selectedCommunity]);
+  useFocusEffect(useCallback(() => {
     void load();
-    const timer = setInterval(() => void load(), 15_000);
+    const timer = setInterval(() => void load(), 60_000);
     return () => clearInterval(timer);
-  }, [load]);
-  useFocusEffect(useCallback(() => { void load(); }, [load]));
+  }, [load]));
   useEffect(() => { void api.communities().then((result) => setCommunities(result.communities)).catch(() => setCommunityError("Could not load communities.")); }, []);
   useEffect(() => {
     if (!communityId) { setMember(false); return; }
