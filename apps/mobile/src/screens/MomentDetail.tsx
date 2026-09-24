@@ -57,7 +57,7 @@ export function MomentDetail() {
       </View>
 
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <Avatar name={moment.creator?.displayName ?? "?"} size={44} />
+        <Avatar name={moment.creator?.displayName ?? "?"} url={moment.creator?.avatarUrl} size={44} />
         <View style={{ flex: 1 }}>
           <Text style={{ color: color.text, ...type.h3 }}>{moment.creator?.displayName}</Text>
           <Text numberOfLines={1} style={{ color: color.textMuted, ...type.bodysm }}>{moment.streamTitle}</Text>
@@ -82,7 +82,7 @@ export function MomentDetail() {
           <View style={{ flexDirection: "row" }}>
             {moment.foundingCurators.slice(0, 5).map((c: any, i: number) => (
               <View key={i} style={{ marginLeft: i ? -8 : 0, borderWidth: 2, borderColor: color.surface1, borderRadius: 16 }}>
-                <Avatar name={c.displayName} size={28} />
+                <Avatar name={c.displayName} url={c.avatarUrl} size={28} />
               </View>
             ))}
           </View>

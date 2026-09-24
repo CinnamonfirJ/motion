@@ -15,6 +15,9 @@ import { MomentDetail } from "./src/screens/MomentDetail";
 import { Earnings } from "./src/screens/Earnings";
 import { Profile } from "./src/screens/Profile";
 import { GoLive } from "./src/screens/GoLive";
+import { CreatePost } from "./src/screens/CreatePost";
+import { PostDetail } from "./src/screens/PostDetail";
+import { PublicProfile } from "./src/screens/PublicProfile";
 import { color, MONO } from "./src/theme";
 import { PrivyProvider, type Chain } from "@privy-io/expo";
 import { initializeReactionQueue } from "./src/lib/reaction-queue";
@@ -68,6 +71,9 @@ function Root() {
       <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
       <Stack.Screen name="Live" component={Live} options={{ headerShown: false, presentation: "fullScreenModal" }} />
       <Stack.Screen name="GoLive" component={GoLive} options={{ title: "Go live", presentation: "modal" }} />
+      <Stack.Screen name="CreatePost" component={CreatePost} options={{ title: "New post", presentation: "modal" }} />
+      <Stack.Screen name="PostDetail" component={PostDetail} options={{ title: "Conversation" }} />
+      <Stack.Screen name="PublicProfile" component={PublicProfile} options={{ title: "Profile" }} />
       <Stack.Screen name="MomentDetail" component={MomentDetail} options={{ title: "Moment" }} />
     </Stack.Navigator>
   );

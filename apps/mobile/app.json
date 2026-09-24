@@ -28,6 +28,14 @@
     },
     "plugins": [
       "expo-video",
+      "expo-image",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ENNOIA lets you choose photos and videos to share in posts.",
+          "cameraPermission": "ENNOIA uses your camera only when you choose to capture media."
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -39,7 +47,15 @@
       ],
       "expo-secure-store",
       "expo-web-browser",
-      "@livekit/react-native-expo-plugin",
+      "@bacons/apple-targets",
+      [
+        "@livekit/react-native-expo-plugin",
+        {
+          "android": {
+            "enableScreenShareService": true
+          }
+        }
+      ],
       "@config-plugins/react-native-webrtc"
     ]
   }

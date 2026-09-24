@@ -21,7 +21,9 @@ export type ServerEvent =
   | { t: "moment_detected"; streamId: string; momentId: string; spikeStreamTimeMs: number }
   | { t: "curator"; momentId: string; rank: number; rewardUnits: string; rewardUsd: string; streamId: string }
   | { t: "settlement"; momentId: string; status: string; txHash: string | null }
-  | { t: "viewers"; streamId: string; count: number };
+  | { t: "viewers"; streamId: string; count: number }
+  | { t: "live_room"; streamId: string }
+  | { t: "feed"; postId: string };
 
 interface Conn {
   ws: SocketLike;

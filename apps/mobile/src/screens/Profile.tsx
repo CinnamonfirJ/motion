@@ -17,7 +17,7 @@ export function Profile() {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: color.night }} contentContainerStyle={{ padding: 16, gap: 20 }}>
       <View style={{ alignItems: "center", gap: 10, paddingTop: 8 }}>
-        <Avatar name={user.displayName} size={80} />
+        <Avatar name={user.displayName} url={user.avatarUrl} size={80} />
         <View style={{ alignItems: "center" }}>
           <Text style={{ color: color.text, ...type.h2 }}>{user.displayName}</Text>
           <Text style={{ color: color.textMuted, ...type.bodysm }}>@{user.handle}</Text>

@@ -13,6 +13,9 @@ import { hub, type SocketLike } from "./realtime.js";
 import { verifyToken } from "./auth.js";
 import { getChain } from "./chain.js";
 import { processPendingAccountDeletions } from "./accountDeletion.js";
+import { LiveRooms } from "./liveRooms.js";
+import { RoomServiceClient, WebhookReceiver } from "livekit-server-sdk";
+import { Streams } from "./store.js";
 
 async function main() {
   const app = Fastify({ logger: { level: "warn" } });
@@ -33,10 +36,42 @@ async function main() {
   });
   await app.register(websocket);
 
+  // LiveKit signs the exact raw body. Never accept an unsigned client claim of host presence.
+  app.addContentTypeParser("application/webhook+json", { parseAs: "string" }, (_req, body, done) => done(null, body));
+
   await migrateDatabase();
   if (!(await databaseReady())) throw new Error("Database readiness check failed after migration.");
 
   await registerRoutes(app);
+
+  if (livekitConfigured()) {
+    const receiver = new WebhookReceiver(env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET);
+    const rooms = new RoomServiceClient(env.LIVEKIT_URL.replace(/^ws/, "http"), env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET);
+    app.post("/webhooks/livekit", async (req, reply) => {
+      let event;
+      try {
+        const body = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+        event = await receiver.receive(body, req.headers.authorization);
+      } catch {
+        return reply.code(401).send({ error: "invalid-livekit-webhook" });
+      }
+      if (event.room?.name?.startsWith("stream_") && event.participant?.identity) {
+        const streamId = event.room.name.slice("stream_".length);
+        const stream = await Streams.byId(streamId);
+        if (stream?.creatorId === event.participant.identity) {
+          if (event.event === "participant_joined") await LiveRooms.hostPresence(streamId, true);
+          if (event.event === "participant_left" || event.event === "participant_connection_aborted") {
+            const connected = await rooms.listParticipants(event.room.name).then(
+              (participants) => participants.some((participant) => participant.identity === stream.creatorId),
+              () => false
+            );
+            await LiveRooms.hostPresence(streamId, connected);
+          }
+        }
+      }
+      return { ok: true };
+    });
+  }
 
   // Realtime endpoint. Clients subscribe to streams + their own user channel.
   app.get("/ws", { websocket: true }, (socket: SocketLike, req) => {
@@ -91,6 +126,12 @@ async function main() {
   setInterval(() => {
     void processPendingAccountDeletions().catch((e) => console.error("account deletion retry error", e));
   }, 60_000);
+
+  setInterval(() => {
+    void LiveRooms.reconcilePresence()
+      .then(() => LiveRooms.endExpired())
+      .catch((e) => console.error("live room grace expiration error", e));
+  }, 15_000);
 
   // Demo participant driver.
   if (env.ENABLE_SEED) {
