@@ -231,16 +231,17 @@ export const api = {
     }),
   me: () => req<{ user: UserDTO; wallet: { address: string; network: string; onchain: boolean } }>("/me"),
   streams: () => req<{ streams: StreamDTO[] }>("/streams"),
-  stream: (id: string) =>
-    req<{ stream: StreamDTO; sync: SyncDTO; activeMoments: MomentDTO[]; recentReactionCount: number }>(`/streams/${id}`),
+  stream: (id: string, signal?: AbortSignal) =>
+    req<{ stream: StreamDTO; sync: SyncDTO; activeMoments: MomentDTO[]; recentReactionCount: number }>(`/streams/${id}`, { signal }),
   sync: (id: string) => req<SyncDTO>(`/streams/${id}/sync`),
-  livekitToken: (id: string) =>
+  livekitToken: (id: string, signal?: AbortSignal) =>
     req<{ url: string; token: string; room: string; role: "host" | "speaker" | "viewer" }>(`/streams/${id}/livekit-token`, {
       method: "POST",
       body: "{}",
+      signal,
     }),
   liveRoom: (id: string) => req<LiveRoomDTO>(`/streams/${id}/live-room`),
-  requestMic: (id: string) => req<{ ok: boolean }>(`/streams/${id}/speaker-request`, { method: "POST", body: "{}" }),
+  requestMic: (id: string) => req<{ ok: boolean; status: "requested" | "invited" | "approved" }>(`/streams/${id}/speaker-request`, { method: "POST", body: "{}" }),
   inviteSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}/invite`, { method: "POST", body: "{}" }),
   acceptSpeakerInvite: (id: string) => req<{ ok: boolean }>(`/streams/${id}/speaker-invite/accept`, { method: "POST", body: "{}" }),
   approveSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}/approve`, { method: "POST", body: "{}" }),
