@@ -67,6 +67,12 @@ test("social feed and live-room permissions use the same authenticated identitie
     const following = await app.inject({ method: "GET", url: "/feed?mode=following", headers: hostAuth });
     assert.equal(following.statusCode, 200, following.body);
     assert.ok(following.json().items.some((item: { post?: { id: string } }) => item.post?.id === postId));
+    const forYou = await app.inject({ method: "GET", url: "/feed?mode=for-you" });
+    assert.equal(forYou.statusCode, 200, forYou.body);
+    assert.ok(forYou.json().items.some((item: { post?: { id: string } }) => item.post?.id === postId));
+    const communityFeed = await app.inject({ method: "GET", url: `/feed?mode=for-you&communityId=${communityId}` });
+    assert.equal(communityFeed.statusCode, 200, communityFeed.body);
+    assert.ok(communityFeed.json().items.some((item: { post?: { id: string } }) => item.post?.id === postId));
 
     const stream = await app.inject({ method: "POST", url: "/streams", headers: hostAuth, payload: { title: "Building live" } });
     assert.equal(stream.statusCode, 200, stream.body);
