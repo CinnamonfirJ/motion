@@ -36,6 +36,13 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+function speakerPath(streamId: string, userId: string): string {
+  if (typeof userId !== "string" || !userId.trim() || userId === "undefined" || userId === "null") {
+    throw new Error("Speaker identity is missing. Refresh the room and try again.");
+  }
+  return `/streams/${streamId}/speakers/${encodeURIComponent(userId)}`;
+}
+
 export interface UserDTO {
   id: string;
   displayName: string;
@@ -143,12 +150,12 @@ export const api = {
   livekitToken: (streamId: string, signal?: AbortSignal) => req<{ url: string; token: string; room: string; role: "host" | "speaker" | "viewer" }>(`/streams/${streamId}/livekit-token`, { method: "POST", body: "{}", signal }),
   liveRoom: (id: string) => req<LiveRoomDTO>(`/streams/${id}/live-room`),
   requestMic: (id: string) => req<{ ok: boolean; status: "requested" | "invited" | "approved" }>(`/streams/${id}/speaker-request`, { method: "POST", body: "{}" }),
-  inviteSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}/invite`, { method: "POST", body: "{}" }),
+  inviteSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`${speakerPath(id, userId)}/invite`, { method: "POST", body: "{}" }),
   acceptSpeakerInvite: (id: string) => req<{ ok: boolean }>(`/streams/${id}/speaker-invite/accept`, { method: "POST", body: "{}" }),
-  approveSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}/approve`, { method: "POST", body: "{}" }),
+  approveSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`${speakerPath(id, userId)}/approve`, { method: "POST", body: "{}" }),
   setSpeakerPermissions: (id: string, userId: string, permissions: { canCamera?: boolean; canScreenShare?: boolean }) =>
-    req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}`, { method: "PATCH", body: JSON.stringify(permissions) }),
-  removeSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}`, { method: "DELETE" }),
+    req<{ ok: boolean }>(speakerPath(id, userId), { method: "PATCH", body: JSON.stringify(permissions) }),
+  removeSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(speakerPath(id, userId), { method: "DELETE" }),
   feed: (mode: "for-you" | "following", before?: number, communityId?: string) =>
     req<{ items: FeedItemDTO[]; nextBefore: number | null }>(`/feed?${new URLSearchParams({ mode, ...(before ? { before: String(before) } : {}), ...(communityId ? { communityId } : {}) })}`),
   post: (id: string) => req<{ post: PostDTO }>(`/posts/${id}`),

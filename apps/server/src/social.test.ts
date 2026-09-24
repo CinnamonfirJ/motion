@@ -83,6 +83,10 @@ test("social feed and live-room permissions use the same authenticated identitie
     const repeatedRequest = await app.inject({ method: "POST", url: `/streams/${streamId}/speaker-request`, headers: viewerAuth });
     assert.equal(repeatedRequest.statusCode, 200, repeatedRequest.body);
     assert.equal(repeatedRequest.json().status, "requested");
+    const hostPendingRoom = (await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: hostAuth })).json();
+    assert.equal(hostPendingRoom.speakers.find((speaker: { status: string }) => speaker.status === "requested")?.userId, viewer.user.id);
+    assert.equal((await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: viewerAuth })).json().mySpeaker.status, "requested");
+    assert.equal((await app.inject({ method: "POST", url: `/streams/${streamId}/speakers/undefined/approve`, headers: hostAuth })).statusCode, 400);
     assert.equal((await app.inject({ method: "POST", url: `/streams/${streamId}/speakers/${viewer.user.id}/approve`, headers: viewerAuth })).statusCode, 403);
     assert.equal((await app.inject({ method: "POST", url: `/streams/${streamId}/speakers/${viewer.user.id}/approve`, headers: hostAuth })).statusCode, 200);
     const firstSpeakerRoom = (await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: viewerAuth })).json();
@@ -103,6 +107,10 @@ test("social feed and live-room permissions use the same authenticated identitie
     assert.equal((await app.inject({ method: "DELETE", url: `/streams/${streamId}/speakers/${viewer.user.id}`, headers: hostAuth })).statusCode, 200);
     assert.equal((await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: viewerAuth })).json().role, "viewer");
     assert.equal((await app.inject({ method: "POST", url: `/streams/${streamId}/speakers/${viewer.user.id}/invite`, headers: hostAuth })).statusCode, 200);
+    const pendingInviteRoom = (await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: viewerAuth })).json();
+    assert.equal(pendingInviteRoom.role, "viewer");
+    assert.equal(pendingInviteRoom.mySpeaker.userId, viewer.user.id);
+    assert.equal(pendingInviteRoom.mySpeaker.status, "invited");
     const invitedRequest = await app.inject({ method: "POST", url: `/streams/${streamId}/speaker-request`, headers: viewerAuth });
     assert.equal(invitedRequest.statusCode, 200, invitedRequest.body);
     assert.equal(invitedRequest.json().status, "invited");
