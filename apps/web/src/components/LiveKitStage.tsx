@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { LiveKitRoom, RoomAudioRenderer, StartAudio, VideoTrack, isTrackReference, useLocalParticipant, useParticipants, useTracks } from "@livekit/components-react";
+import { LiveKitRoom, RoomAudioRenderer, StartAudio, VideoTrack, isTrackReference, useLocalParticipant, useLocalParticipantPermissions, useParticipants, useTracks } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import "@livekit/components-styles";
 import { api, type LiveRoomDTO } from "../lib/api";
@@ -11,8 +11,10 @@ const control = "border border-border bg-surface2 px-3 py-2 font-mono text-micro
 
 function RoomStage({ streamId, hostId, initialRole }: { streamId: string; hostId: string; initialRole: Role }) {
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = useLocalParticipant();
+  const localPermissions = useLocalParticipantPermissions();
   const participants = useParticipants();
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
+  const micTracks = useTracks([Track.Source.Microphone]);
   const [state, setState] = useState<LiveRoomDTO | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,14 +30,14 @@ function RoomStage({ streamId, hostId, initialRole }: { streamId: string; hostId
     return () => { clearInterval(timer); off(); };
   }, [refresh, streamId]);
 
-  const act = async (action: () => Promise<unknown>) => {
+  const act = async (action: () => Promise<unknown>, device = "Microphone") => {
     if (pending) return;
     setPending(true); setError(null);
     try { await action(); await refresh(); }
     catch (cause) {
       const message = cause instanceof Error ? cause.message : "That action did not work. Try again.";
       setError(/permission denied|notallowed/i.test(message)
-        ? "Microphone access was denied. Allow it in your browser's site settings, then select Enable mic again."
+        ? `${device} access was denied. Allow it in your browser's site settings, then try again.`
         : message);
     }
     finally { setPending(false); }
@@ -46,6 +48,9 @@ function RoomStage({ streamId, hostId, initialRole }: { streamId: string; hostId
   const isSpeaker = role === "speaker";
   const canCamera = isHost || (isSpeaker && !!state?.mySpeaker?.canCamera);
   const canScreen = isHost || (isSpeaker && !!state?.mySpeaker?.canScreenShare);
+  const speakerPermissionReady = !isSpeaker || !!localPermissions?.canPublish;
+  const micLiveFor = (id: string) => micTracks.some((item) => isTrackReference(item) && item.participant.identity === id && !item.publication.isMuted);
+  const cameraLiveFor = (id: string) => tracks.some((item) => isTrackReference(item) && item.participant.identity === id && item.source === Track.Source.Camera && !item.publication.isMuted);
   const main = tracks.find((item) => isTrackReference(item) && item.participant.identity === hostId && item.source === Track.Source.ScreenShare)
     ?? tracks.find((item) => isTrackReference(item) && item.participant.identity === hostId && item.source === Track.Source.Camera);
   const side = tracks.filter((item) => isTrackReference(item) && item !== main);
@@ -66,22 +71,23 @@ function RoomStage({ streamId, hostId, initialRole }: { streamId: string; hostId
       </div>
       <aside className="max-h-[42%] w-full overflow-y-auto border-t border-border bg-surface1 p-4 md:max-h-full md:w-72 md:border-l md:border-t-0 md:pt-20" aria-label={isHost ? "Host controls" : "Audience controls"}>
         <p className="font-mono text-micro uppercase tracking-[0.14em] text-lime">{isHost ? "Host studio" : isSpeaker ? "Speaker seat" : "Watching live"}</p>
-        <p className="mt-2 text-bodysm text-text-secondary">{isHost ? "You control who can speak, show camera, or share a screen." : isSpeaker ? "The host gave you a microphone." : "Ask the host for a mic if you want to speak."}</p>
+        <p className="mt-2 text-bodysm text-text-secondary">{isHost ? "You control who can speak, show camera, or share a screen." : isSpeaker ? "Your speaker seat is ready. Turn on your mic or camera when you choose." : "Ask the host for a mic if you want to speak."}</p>
         {(isHost || isSpeaker) && <div className="mt-4 grid grid-cols-2 gap-2">
-          <button className={control} disabled={pending} onClick={() => void act(() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled))}>{isMicrophoneEnabled ? "Mute mic" : "Enable mic"}</button>
-          {canCamera && <button className={control} disabled={pending} onClick={() => void act(() => localParticipant.setCameraEnabled(!isCameraEnabled))}>{isCameraEnabled ? "Camera off" : "Camera on"}</button>}
-          {canScreen && <button className={`${control} col-span-2`} disabled={pending} onClick={() => void act(() => localParticipant.setScreenShareEnabled(!isScreenShareEnabled))}>{isScreenShareEnabled ? "Stop sharing" : "Share screen"}</button>}
+          <button className={control} disabled={pending || !speakerPermissionReady} onClick={() => void act(() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled))}>{isMicrophoneEnabled ? "Mute mic" : "Enable mic"}</button>
+          {canCamera && <button className={control} disabled={pending || !speakerPermissionReady} onClick={() => void act(() => localParticipant.setCameraEnabled(!isCameraEnabled), "Camera")}>{isCameraEnabled ? "Camera off" : "Camera on"}</button>}
+          {canScreen && <button className={`${control} col-span-2`} disabled={pending || !speakerPermissionReady} onClick={() => void act(() => localParticipant.setScreenShareEnabled(!isScreenShareEnabled), "Screen sharing")}>{isScreenShareEnabled ? "Stop sharing" : "Share screen"}</button>}
         </div>}
+        {isSpeaker && !speakerPermissionReady && <p className="mt-3 text-bodysm text-text-secondary">Speaker permission is syncing with the room…</p>}
         {!state && <p className="mt-4 text-bodysm text-text-secondary">Loading speaker status…</p>}
         {state && !isHost && !isSpeaker && !state.mySpeaker && <button className={`${control} mt-4 w-full`} disabled={pending} onClick={() => void act(() => api.requestMic(streamId))}>Request mic</button>}
         {state?.mySpeaker?.status === "requested" && <p className="mt-4 text-bodysm text-text-secondary">Request sent. The host chooses who joins.</p>}
         {state?.mySpeaker?.status === "invited" && <button className={`${control} mt-4 w-full border-lime text-lime`} disabled={pending} onClick={() => void act(() => api.acceptSpeakerInvite(streamId))}>Accept invite</button>}
-        {isSpeaker && !isMicrophoneEnabled && <p className="mt-3 text-bodysm text-text-secondary">Speaker access approved. Select Enable mic and allow browser microphone access to speak.</p>}
+        {isSpeaker && <p className="mt-3 text-bodysm text-text-secondary">Mic {micLiveFor(localParticipant.identity) ? "live" : "off"} · Camera {cameraLiveFor(localParticipant.identity) ? "live" : "off"}. {!micLiveFor(localParticipant.identity) && "Select Enable mic and allow browser access to speak."}</p>}
         {isSpeaker && <button className={`${control} mt-3 w-full`} disabled={pending} onClick={() => void act(() => api.removeSpeaker(streamId, localParticipant.identity))}>Leave speaker seat</button>}
         {isHost && state && <div className="mt-5 space-y-4">
           <section><h3 className="font-mono text-micro uppercase tracking-[0.14em] text-text-secondary">Mic requests · {requested.length}</h3>{requested.length === 0 && <p className="mt-2 text-bodysm text-text-muted">No requests yet.</p>}{requested.map((speaker) => <div key={speaker.userId} className="mt-2 flex items-center justify-between gap-2 border border-border p-2"><span className="truncate text-bodysm">{nameOf(speaker.userId)}</span><button className={control} disabled={pending} onClick={() => void act(() => api.approveSpeaker(streamId, speaker.userId))}>Allow mic</button></div>)}</section>
           <section><h3 className="font-mono text-micro uppercase tracking-[0.14em] text-text-secondary">Invite viewers</h3>{participants.filter((person) => person.identity !== hostId && !state?.speakers.some((speaker) => speaker.userId === person.identity)).map((person) => <div key={person.identity} className="mt-2 flex items-center justify-between gap-2 border border-border p-2"><span className="truncate text-bodysm">{person.name || person.identity}</span><button className={control} disabled={pending} onClick={() => void act(() => api.inviteSpeaker(streamId, person.identity))}>Invite</button></div>)}{invited.map((speaker) => <p key={speaker.userId} className="mt-2 text-bodysm text-text-muted">Invite pending · {nameOf(speaker.userId)}</p>)}</section>
-          <section><h3 className="font-mono text-micro uppercase tracking-[0.14em] text-text-secondary">Speakers · {approved.length}</h3>{approved.map((speaker) => <div key={speaker.userId} className="mt-2 space-y-2 border border-border p-2"><p className="truncate text-bodysm">{nameOf(speaker.userId)}</p><div className="flex flex-wrap gap-1"><button className={control} disabled={pending} onClick={() => void act(() => api.setSpeakerPermissions(streamId, speaker.userId, { canCamera: !speaker.canCamera }))}>{speaker.canCamera ? "Camera ✓" : "Allow camera"}</button><button className={control} disabled={pending} onClick={() => void act(() => api.setSpeakerPermissions(streamId, speaker.userId, { canScreenShare: !speaker.canScreenShare }))}>{speaker.canScreenShare ? "Screen ✓" : "Allow screen"}</button><button className={control} disabled={pending} onClick={() => void act(() => api.removeSpeaker(streamId, speaker.userId))}>Remove</button></div></div>)}</section>
+          <section><h3 className="font-mono text-micro uppercase tracking-[0.14em] text-text-secondary">Speakers · {approved.length}</h3>{approved.map((speaker) => <div key={speaker.userId} className="mt-2 space-y-2 border border-border p-2"><p className="truncate text-bodysm">{nameOf(speaker.userId)}</p><p className="font-mono text-micro uppercase text-text-secondary">{!participants.some((person) => person.identity === speaker.userId) ? "Not in room" : `Mic ${micLiveFor(speaker.userId) ? "live" : "off"} · Camera ${cameraLiveFor(speaker.userId) ? "live" : "off"}`}</p><div className="flex flex-wrap gap-1"><button className={control} disabled={pending} onClick={() => void act(() => api.setSpeakerPermissions(streamId, speaker.userId, { canCamera: !speaker.canCamera }))}>{speaker.canCamera ? "Disable camera" : "Allow camera"}</button><button className={control} disabled={pending} onClick={() => void act(() => api.setSpeakerPermissions(streamId, speaker.userId, { canScreenShare: !speaker.canScreenShare }))}>{speaker.canScreenShare ? "Disable screen" : "Allow screen"}</button><button className={control} disabled={pending} onClick={() => void act(() => api.removeSpeaker(streamId, speaker.userId))}>Remove</button></div></div>)}</section>
         </div>}
         {error && <p role="alert" className="mt-4 border border-error px-3 py-2 text-bodysm text-error">{error}</p>}
         <StartAudio label="Enable stream audio" />

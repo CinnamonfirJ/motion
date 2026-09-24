@@ -16,8 +16,8 @@ module.exports = () => {
       },
       infoPlist: {
         ...base.ios.infoPlist,
-        NSCameraUsageDescription: "ENNOIA uses your camera when you choose to host a live stream.",
-        NSMicrophoneUsageDescription: "ENNOIA uses your microphone when you choose to host a live stream.",
+        NSCameraUsageDescription: "ENNOIA uses your camera when you choose to host or speak in a live stream.",
+        NSMicrophoneUsageDescription: "ENNOIA uses your microphone when you choose to host or speak in a live stream.",
         RTCAppGroupIdentifier: appGroup,
         RTCScreenSharingExtension: `${bundleId}.broadcast`,
         UIBackgroundModes: ["audio", "voip"],

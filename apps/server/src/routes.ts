@@ -279,7 +279,7 @@ export async function registerRoutes(app: FastifyInstance) {
     return { stream: await streamView(stream, 0) };
   });
 
-  // Mint a LiveKit room token. Host grant only for the stream's creator; everyone else viewer.
+  // Mint a LiveKit room token. The creator is host; approved speakers receive scoped publish grants.
   app.post("/streams/:id/livekit-token", async (req, reply) => {
     const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
@@ -346,7 +346,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const stream = await Streams.byId(id);
     if (!stream?.isLive) return reply.code(409).send({ error: "stream-not-live" });
     if ((await LiveRooms.speaker(id, user.id))?.status !== "invited") return reply.code(409).send({ error: "no-invitation" });
-    await LiveRooms.setSpeaker(id, user.id, "approved");
+    await LiveRooms.setSpeaker(id, user.id, "approved", true);
     return { ok: true };
   });
 
@@ -358,7 +358,7 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!stream?.isLive) return reply.code(409).send({ error: "stream-not-live" });
     if (stream.creatorId !== host.id) return reply.code(403).send({ error: "host-only" });
     if ((await LiveRooms.speaker(id, userId))?.status !== "requested") return reply.code(409).send({ error: "no-request" });
-    await LiveRooms.setSpeaker(id, userId, "approved");
+    await LiveRooms.setSpeaker(id, userId, "approved", true);
     return { ok: true };
   });
 
