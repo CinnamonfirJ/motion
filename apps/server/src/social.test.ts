@@ -33,8 +33,10 @@ test("social feed and live-room permissions use the same authenticated identitie
     }
     const host = await login("host@example.test");
     const viewer = await login("viewer@example.test");
+    const secondViewer = await login("second-viewer@example.test");
     const hostAuth = { authorization: `Bearer ${host.token}` };
     const viewerAuth = { authorization: `Bearer ${viewer.token}` };
+    const secondViewerAuth = { authorization: `Bearer ${secondViewer.token}` };
 
     const community = await app.inject({ method: "POST", url: "/communities", headers: hostAuth, payload: { name: "Builders", description: "Building together" } });
     assert.equal(community.statusCode, 201, community.body);
@@ -83,12 +85,21 @@ test("social feed and live-room permissions use the same authenticated identitie
     assert.equal(repeatedRequest.json().status, "requested");
     assert.equal((await app.inject({ method: "POST", url: `/streams/${streamId}/speakers/${viewer.user.id}/approve`, headers: viewerAuth })).statusCode, 403);
     assert.equal((await app.inject({ method: "POST", url: `/streams/${streamId}/speakers/${viewer.user.id}/approve`, headers: hostAuth })).statusCode, 200);
-    assert.equal((await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: viewerAuth })).json().role, "speaker");
+    const firstSpeakerRoom = (await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: viewerAuth })).json();
+    assert.equal(firstSpeakerRoom.role, "speaker");
+    assert.equal(firstSpeakerRoom.mySpeaker.canCamera, true);
+    assert.equal(firstSpeakerRoom.mySpeaker.canScreenShare, false);
+    assert.equal((await app.inject({ method: "POST", url: `/streams/${streamId}/speaker-request`, headers: secondViewerAuth })).statusCode, 200);
+    assert.equal((await app.inject({ method: "POST", url: `/streams/${streamId}/speakers/${secondViewer.user.id}/approve`, headers: hostAuth })).statusCode, 200);
+    const secondSpeakerRoom = (await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: secondViewerAuth })).json();
+    assert.equal(secondSpeakerRoom.role, "speaker");
+    assert.equal(secondSpeakerRoom.mySpeaker.canCamera, true);
+    assert.equal((await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: hostAuth })).json().speakers.filter((speaker: { status: string }) => speaker.status === "approved").length, 2);
     const approvedRequest = await app.inject({ method: "POST", url: `/streams/${streamId}/speaker-request`, headers: viewerAuth });
     assert.equal(approvedRequest.statusCode, 200, approvedRequest.body);
     assert.equal(approvedRequest.json().status, "approved");
-    assert.equal((await app.inject({ method: "PATCH", url: `/streams/${streamId}/speakers/${viewer.user.id}`, headers: hostAuth, payload: { canCamera: true } })).statusCode, 200);
-    assert.equal((await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: viewerAuth })).json().mySpeaker.canCamera, true);
+    assert.equal((await app.inject({ method: "PATCH", url: `/streams/${streamId}/speakers/${viewer.user.id}`, headers: hostAuth, payload: { canCamera: false } })).statusCode, 200);
+    assert.equal((await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: viewerAuth })).json().mySpeaker.canCamera, false);
     assert.equal((await app.inject({ method: "DELETE", url: `/streams/${streamId}/speakers/${viewer.user.id}`, headers: hostAuth })).statusCode, 200);
     assert.equal((await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: viewerAuth })).json().role, "viewer");
     assert.equal((await app.inject({ method: "POST", url: `/streams/${streamId}/speakers/${viewer.user.id}/invite`, headers: hostAuth })).statusCode, 200);
@@ -96,7 +107,9 @@ test("social feed and live-room permissions use the same authenticated identitie
     assert.equal(invitedRequest.statusCode, 200, invitedRequest.body);
     assert.equal(invitedRequest.json().status, "invited");
     assert.equal((await app.inject({ method: "POST", url: `/streams/${streamId}/speaker-invite/accept`, headers: viewerAuth })).statusCode, 200);
-    assert.equal((await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: viewerAuth })).json().role, "speaker");
+    const invitedSpeakerRoom = (await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: viewerAuth })).json();
+    assert.equal(invitedSpeakerRoom.role, "speaker");
+    assert.equal(invitedSpeakerRoom.mySpeaker.canCamera, true);
   } finally {
     await app.close();
     await db.close();

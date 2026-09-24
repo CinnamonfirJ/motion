@@ -72,7 +72,10 @@ Last updated: 2026-09-24
 | Accent usage | `text-lime` for role and invite state |
 
 **Pattern notes:** Host studio and viewer controls use the same square panel language but
-expose different actions. Black and translucent black belong only to the video surface.
+expose different actions. Speaker mic/camera publication state and permission-sync guidance
+use the existing `text-text-secondary` supporting-text treatment; host speaker rows use
+`font-mono text-micro uppercase` for live/off status. Black and translucent black belong
+only to the video surface.
 
 ### Mobile broadcast stage and controls
 
@@ -95,6 +98,8 @@ Last updated: 2026-09-24
 
 **Pattern notes:** The native studio has the same square, bordered hierarchy as web.
 Viewer and speaker actions are intentionally separated from host moderation controls.
+Speaker mic/camera publication state and permission-sync guidance use `color.textSecondary`
+with `type.bodysm`; host speaker-row status uses `eyebrow(10)` on the same surface.
 On iOS, the screen-share control opens the system broadcast picker while preserving
 the existing square control styling; Android keeps its foreground-service path.
 
