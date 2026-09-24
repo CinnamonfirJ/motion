@@ -43,6 +43,10 @@ function viewerKey(req: FastifyRequest): string {
   return `anon:${createHmac("sha256", env.JWT_SECRET).update(anonymous).digest("hex")}`;
 }
 
+function validSpeakerUserId(userId: string): boolean {
+  return !!userId?.trim() && userId !== "undefined" && userId !== "null";
+}
+
 export async function registerRoutes(app: FastifyInstance) {
   await registerSocialRoutes(app, bearer);
   app.get("/health", async () => ({ ok: true, chain: getChain().enabled ? "onchain" : "simulation" }));
@@ -330,6 +334,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const host = await bearer(req);
     if (!host) return reply.code(401).send({ error: "unauthorized" });
     const { id, userId } = req.params as { id: string; userId: string };
+    if (!validSpeakerUserId(userId)) return reply.code(400).send({ error: "invalid-speaker-user-id" });
     const stream = await Streams.byId(id);
     if (!stream) return reply.code(404).send({ error: "not-found" });
     if (stream.creatorId !== host.id) return reply.code(403).send({ error: "host-only" });
@@ -354,6 +359,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const host = await bearer(req);
     if (!host) return reply.code(401).send({ error: "unauthorized" });
     const { id, userId } = req.params as { id: string; userId: string };
+    if (!validSpeakerUserId(userId)) return reply.code(400).send({ error: "invalid-speaker-user-id" });
     const stream = await Streams.byId(id);
     if (!stream?.isLive) return reply.code(409).send({ error: "stream-not-live" });
     if (stream.creatorId !== host.id) return reply.code(403).send({ error: "host-only" });
@@ -366,6 +372,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const host = await bearer(req);
     if (!host) return reply.code(401).send({ error: "unauthorized" });
     const { id, userId } = req.params as { id: string; userId: string };
+    if (!validSpeakerUserId(userId)) return reply.code(400).send({ error: "invalid-speaker-user-id" });
     const stream = await Streams.byId(id);
     if (!stream?.isLive) return reply.code(409).send({ error: "stream-not-live" });
     if (stream.creatorId !== host.id) return reply.code(403).send({ error: "host-only" });
@@ -381,6 +388,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
     const { id, userId } = req.params as { id: string; userId: string };
+    if (!validSpeakerUserId(userId)) return reply.code(400).send({ error: "invalid-speaker-user-id" });
     const stream = await Streams.byId(id);
     if (!stream) return reply.code(404).send({ error: "not-found" });
     if (stream.creatorId !== user.id && userId !== user.id) return reply.code(403).send({ error: "host-or-self-only" });
