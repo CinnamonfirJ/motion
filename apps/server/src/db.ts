@@ -128,6 +128,24 @@ CREATE TABLE IF NOT EXISTS streams (
   createdAt BIGINT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS stream_presence (
+  streamId TEXT PRIMARY KEY REFERENCES streams(id) ON DELETE CASCADE,
+  hostConnected BOOLEAN NOT NULL DEFAULT FALSE,
+  hostDisconnectedAt BIGINT,
+  updatedAt BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS stream_speakers (
+  streamId TEXT NOT NULL REFERENCES streams(id) ON DELETE CASCADE,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL,
+  canCamera BOOLEAN NOT NULL DEFAULT FALSE,
+  canScreenShare BOOLEAN NOT NULL DEFAULT FALSE,
+  updatedAt BIGINT NOT NULL,
+  PRIMARY KEY (streamId, userId)
+);
+CREATE INDEX IF NOT EXISTS idx_stream_speakers_status ON stream_speakers(streamId, status);
+
 CREATE TABLE IF NOT EXISTS reactions (
   id TEXT PRIMARY KEY,
   eventId TEXT UNIQUE NOT NULL,
@@ -211,6 +229,72 @@ CREATE TABLE IF NOT EXISTS blocked_users (
   blockedId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   createdAt BIGINT NOT NULL,
   PRIMARY KEY (blockerId, blockedId)
+);
+
+CREATE TABLE IF NOT EXISTS follows (
+  followerId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  followingId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  createdAt BIGINT NOT NULL,
+  PRIMARY KEY (followerId, followingId)
+);
+CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(followingId);
+
+CREATE TABLE IF NOT EXISTS communities (
+  id TEXT PRIMARY KEY,
+  slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  ownerId TEXT NOT NULL REFERENCES users(id),
+  createdAt BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS community_members (
+  communityId TEXT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  joinedAt BIGINT NOT NULL,
+  PRIMARY KEY (communityId, userId)
+);
+
+CREATE TABLE IF NOT EXISTS posts (
+  id TEXT PRIMARY KEY,
+  authorId TEXT NOT NULL REFERENCES users(id),
+  body TEXT NOT NULL DEFAULT '',
+  mediaJson TEXT NOT NULL DEFAULT '[]',
+  linkUrl TEXT,
+  streamId TEXT REFERENCES streams(id),
+  momentId TEXT REFERENCES moments(id),
+  communityId TEXT REFERENCES communities(id),
+  replyToId TEXT REFERENCES posts(id),
+  quotePostId TEXT REFERENCES posts(id),
+  repostOfId TEXT REFERENCES posts(id),
+  createdAt BIGINT NOT NULL,
+  deletedAt BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_posts_recent ON posts(createdAt);
+CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(authorId, createdAt);
+CREATE INDEX IF NOT EXISTS idx_posts_reply ON posts(replyToId, createdAt);
+CREATE INDEX IF NOT EXISTS idx_posts_community ON posts(communityId, createdAt);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_one_repost ON posts(authorId, repostOfId) WHERE repostOfId IS NOT NULL AND deletedAt IS NULL;
+
+CREATE TABLE IF NOT EXISTS post_likes (
+  postId TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  createdAt BIGINT NOT NULL,
+  PRIMARY KEY (postId, userId)
+);
+CREATE TABLE IF NOT EXISTS post_views (
+  postId TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  viewerKey TEXT NOT NULL,
+  viewedAt BIGINT NOT NULL,
+  PRIMARY KEY (postId, viewerKey)
+);
+CREATE TABLE IF NOT EXISTS post_uploads (
+  id TEXT PRIMARY KEY,
+  ownerId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  objectKey TEXT UNIQUE NOT NULL,
+  contentType TEXT NOT NULL,
+  maxBytes BIGINT NOT NULL,
+  createdAt BIGINT NOT NULL,
+  usedAt BIGINT
 );
 
 CREATE TABLE IF NOT EXISTS account_deletion_jobs (

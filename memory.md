@@ -1,45 +1,44 @@
-# Memory — ENNOIA Testnet Deployment Handoff
+# Memory — ENNOIA livestream studio and social feed
 
-Last updated: 2026-09-23 15:08 Africa/Lagos
+Last updated: 2026-09-24 07:57 Africa/Lagos
 
 ## What was built
 
-- ENNOIA web and Expo mobile integrate Privy, LiveKit, Monad testnet, Cloudflare R2, Neon PostgreSQL, and an Envio indexer. Mobile application ID is `com.ennoia.app`; “Moment” remains the captured livestream object.
-- Local values from root `env.txt` were split into ignored root, web, mobile, and indexer `.env` files; the redundant `env.txt` was removed. The incomplete multiline Privy verification key was cleared and must be recopied from Privy if desired; it is optional for the current SDK path.
-- Pinned TypeScript 5.9.3 in `packages/contracts/package.json` to resolve Hardhat’s TypeScript 6 `moduleResolution=node10` failure. Contract build and all 8 tests pass.
-- Migrated `packages/indexer` from Envio V2 to V3.12.1, including config, event handlers, and tsconfig. The config defaults to the deployed public contract address and working Monad testnet RPC, starts at deployment block 65,032,013, and still allows Envio environment overrides.
-- Committed and pushed the contracts/indexer fixes to `origin/envio` as `5e01829`. Did not include ignored secrets, the untracked deployment artifact, `.gitignore`, or this memory file.
+- Server: `apps/server/src/liveRooms.ts`, `livekit.ts`, `routes.ts`, and `index.ts` implement signed LiveKit webhook handling, host presence with a five-minute reconnection grace period, scoped host/speaker/viewer tokens, viewer mic requests, host invitations and approval, per-speaker camera/screen permissions, and automatic end after grace. `db.ts` adds presence and social tables.
+- Server: `apps/server/src/social.ts` implements posts, replies, quotes, reshares, likes, unique views, follows, public profiles, communities, For You/Following feeds, and signed Cloudflare R2 post-media uploads. `accountDeletion.ts` includes uploaded-media cleanup. `social.test.ts` covers core authenticated social and speaker routes.
+- Web: `apps/web/src/components/LiveKitStage.tsx` and `screens/Live.tsx` show distinct host studio, speaker seat, and viewer controls. `components/PostCard.tsx`, `PostComposer.tsx`, `screens/Home.tsx`, and `UserProfile.tsx` provide an ENNOIA-styled unified feed and social actions. `App.tsx` adds public profile routing.
+- Mobile: `components/livekit-stage.tsx` and `screens/Live.tsx` add distinct live roles and controls. `components/post-card.tsx`, `screens/Home.tsx`, `CreatePost.tsx`, `PostDetail.tsx`, and `PublicProfile.tsx` provide the unified feed, media composer, reply threads, and followable profiles. `App.tsx` adds navigation. Expo config includes image/file modules and Android screen-sharing service permissions.
+- Root `ui-registry.md` records the ENNOIA visual patterns for the new components. `README.md` documents LiveKit webhook and R2 browser-upload setup.
 
 ## Decisions made
 
-- Hackathon exhibition uses real Monad testnet, not a simulated or mainnet release. Neon is the app database; Render hosts only the API, Vercel hosts the web, and Envio Cloud hosts the indexer.
-- The user will run the EAS mobile build and handle Google Play submission; do not run a mobile build without a new request.
-- Keep secrets in ignored local files and platform dashboards. Client bundles receive only public `VITE_*` and `EXPO_PUBLIC_*` values.
-- A full production-mode Moment demo needs four eligible distinct reactors after 15 seconds’ watch time and 25 deduplicated Moment views before settlement. Development fast-forward is disabled in production.
+- Hackathon exhibition uses Monad testnet with Render API, Vercel web app, Neon database, Envio indexer, LiveKit, Privy, and Cloudflare R2. No mainnet or web-only release is intended.
+- Mobile remains Expo/React Navigation with the existing ENNOIA theme; no restructuring to Expo Router. The user will run the EAS build and Google Play submission themselves. Do not build EAS without a new request.
+- Viewer is subscribe-only until the host approves a mic request or an invite is accepted. The host controls speaker camera/screen permissions. Android screen share is configured; iOS screen share is hidden pending a ReplayKit Broadcast Extension.
+- Do not push or deploy without an explicit request. The current branch is `envio` at commit `b020780`; this feature is uncommitted. Preserve unrelated user changes.
 
 ## Problems solved
 
-- The user deployed `MomentRewards` on Monad testnet at public address `0xF5dBf042aaDb38e4519D2B972C0a4f16C22a20EA`. Read-only RPC checks located deployment block 65,032,013, confirmed contract code and 0.5 testnet MON pool, and confirmed the configured backend settler is authorized.
-- An Envio dashboard warning concerned a V2 indexer version with a rollback-on-reorg bug; the package and source were migrated to current V3.12.1 rather than installing `latest` only at the workspace root.
-- Local Envio codegen cannot run on this Windows host: the CLI native runner returns a null `runCli` error; WSL/Docker is unavailable. The V3 YAML was parsed and checked for one chain, one contract, seven events, correct handler path, address fallback, and start block.
+- The old livestream looked the same for the creator and audience even though the backend assigned host identity. Separate studio/viewer UI is now implemented on web and mobile.
+- LiveKit speaker grants must enable `canPublish` as well as restricting `canPublishSources`; this mismatch was fixed in `apps/server/src/livekit.ts`.
+- Mobile post threads and profiles now refresh on navigation focus; the feed also refreshes on focus.
 
 ## Current state
 
-- Branch `envio`, latest pushed commit `5e01829`. The Git push should trigger a new Envio Cloud deployment, but its build/codegen result has not been verified. Earlier deployment at `7b8afe0` failed at codegen; exact dashboard log lines were not provided.
-- Root/server and indexer local ignored `.env` files contain the deployed contract address. The public deployment artifact under `packages/contracts/deployments/` remains untracked. Existing local edits to `.gitignore` and `memory.md` are intentionally separate from the pushed commit.
-- An existing `ENVIO_GRAPHQL_URL` in local config did not respond to a GraphQL health query; obtain the working URL after Envio succeeds.
-- Production configuration is still incomplete: Neon `DATABASE_URL`, non-default `JWT_SECRET`, `PLATFORM_ADDRESS`, deployed HTTPS web/API URLs, final domain/passkey association, and hosted environment settings need attention. Local `APP_MODE` is development with seed/demo routes enabled; production must disable both.
-- No Render/Vercel deployment, signed EAS mobile build, physical-device test, or full end-to-end demo has been verified this session.
+- Server typecheck, mobile typecheck, the isolated SQLite social/live-room test, Expo public-config resolution, and the web production build pass. The web build still warns about a large JavaScript chunk.
+- These changes have not been pushed or deployed. No EAS build or native-device runtime test was performed. The test uses local SQLite and fake R2 signing, not the live Neon/R2/LiveKit services.
+- Review findings: mobile post/profile avatars display initials rather than avatar images; iOS screen sharing lacks a ReplayKit extension; Android screen sharing and live speaker promotion need device/service end-to-end testing. LiveKit Cloud webhook and R2 bucket CORS must be configured externally before those flows work in deployment.
+- The `review` skill was used at the end of implementation; it requires reporting findings and stopping until the developer chooses what to address. The prior answer reported these findings and paused implementation.
 
 ## Next session starts with
 
-1. Run `/remember restore` and confirm this state.
-2. Check the Envio deployment for commit `5e01829`. If it failed, obtain the new Codegen log lines and diagnose; if successful, verify indexed events and put its GraphQL URL in the API’s Render environment.
-3. Ensure Envio dashboard branch is `envio`, root is `packages/indexer`, config path is `config.yaml`, and any address/RPC overrides are correct. Do not assume local `.env` values reached Envio Cloud.
-4. Finish Neon/Render/Vercel and final domain/passkey setup; let the user make the EAS build. Rehearse real LiveKit streaming, reactions, R2 clips, tips, Envio indexing, and settlement.
+1. Restore this memory and confirm it with the user.
+2. Ask which review findings to address. The immediate code gap is mobile avatar images in `apps/mobile/src/components/post-card.tsx` and `screens/PublicProfile.tsx` (the existing shared `Avatar` component is name-based).
+3. Once the user authorizes continued fixes, verify web and Android live-room roles/permissions on real LiveKit, R2 uploads in a browser, and new social migrations against a safe staging database before deployment. Do not mutate the live Neon database as a test.
+4. Obtain user direction for iOS screen-sharing scope. The user owns the eventual EAS build.
 
 ## Open questions
 
-- Did the `5e01829` Envio Cloud deployment pass codegen, and what are its GraphQL URL or exact error logs?
-- What is the final web domain, platform-recipient wallet address, and Android signing certificate fingerprint?
-- Are all hosted environment variables configured, and can the full flow pass on physical devices?
+- Should iOS screen sharing be implemented now via a ReplayKit Broadcast Extension, or be explicitly out of scope for the Google Play hackathon demo?
+- Are the LiveKit webhook and R2 browser CORS settings configured in the external dashboards?
+- Does the user want the remaining review findings fixed before any commit/deployment, and should deployment be performed by the user or requested from the agent later?

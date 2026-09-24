@@ -1,5 +1,6 @@
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from "react-native";
-import type { ReactNode } from "react";
+import { Image } from "expo-image";
+import { useEffect, useState, type ReactNode } from "react";
 import { color, radius, MONO, eyebrow, monoText, REACTION_ICON } from "../theme";
 
 /** Four corner brackets drawn just inside a box (matches the reference's secondary buttons). */
@@ -75,12 +76,14 @@ export function PlusMark({ style }: { style?: any }) {
   );
 }
 
-export function Avatar({ name, size = 40 }: { name: string; size?: number }) {
+export function Avatar({ name, size = 40, url }: { name: string; size?: number; url?: string | null }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [url]);
   const h = hue(name);
   const initials = name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: `hsl(${h}, 60%, 62%)`, alignItems: "center", justifyContent: "center" }}>
-      <Text style={{ color: color.night, fontWeight: "700", fontSize: size * 0.36 }}>{initials}</Text>
+    <View style={{ width: size, height: size, borderRadius: size / 2, overflow: "hidden", backgroundColor: `hsl(${h}, 60%, 62%)`, alignItems: "center", justifyContent: "center" }}>
+      {url && !failed ? <Image source={{ uri: url }} contentFit="cover" accessibilityLabel={`${name}'s profile picture`} onError={() => setFailed(true)} style={{ width: size, height: size }} /> : <Text style={{ color: color.night, fontWeight: "700", fontSize: size * 0.36 }}>{initials}</Text>}
     </View>
   );
 }

@@ -12,6 +12,7 @@ import { Profile } from "./screens/Profile";
 import { Demo } from "./screens/Demo";
 import { GoLive } from "./screens/GoLive";
 import { Legal } from "./screens/Legal";
+import { UserProfile } from "./screens/UserProfile";
 
 function OfflineBanner() {
   const [offline, setOffline] = useState(!navigator.onLine);
@@ -56,6 +57,7 @@ function Gate() {
             <Route path="/moments/:id" element={<MomentDetail />} />
             <Route path="/earnings" element={<Earnings />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/users/:id" element={<UserProfile />} />
             <Route path="/go-live" element={<GoLive />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

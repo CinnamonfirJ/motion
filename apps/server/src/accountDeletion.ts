@@ -1,5 +1,6 @@
 import { deletePrivyUser } from "./privy.js";
 import { AccountDeletions } from "./store.js";
+import { deleteUserPostMedia } from "./social.js";
 
 let processing = false;
 const processingJobs = new Set<string>();
@@ -11,6 +12,7 @@ export async function processAccountDeletionJob(jobId: string): Promise<boolean>
     const job = await AccountDeletions.byId(jobId);
     if (!job || job.status === "complete") return true;
     try {
+      await deleteUserPostMedia(job.userId);
       if (job.privyId) await deletePrivyUser(job.privyId);
       await AccountDeletions.complete(job.id);
       return true;

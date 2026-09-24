@@ -86,6 +86,11 @@ async function anonymizeUser(transaction: DatabaseClient, id: string): Promise<v
   await transaction.execute("DELETE FROM passkey_credentials WHERE userId = $1", [id]);
   await transaction.execute("DELETE FROM reports WHERE reporterId = $1", [id]);
   await transaction.execute("DELETE FROM blocked_users WHERE blockerId = $1 OR blockedId = $1", [id]);
+  await transaction.execute("DELETE FROM follows WHERE followerId = $1 OR followingId = $1", [id]);
+  await transaction.execute("DELETE FROM community_members WHERE userId = $1", [id]);
+  await transaction.execute("DELETE FROM post_likes WHERE userId = $1", [id]);
+  await transaction.execute("DELETE FROM post_views WHERE viewerKey = $1", [`user:${id}`]);
+  await transaction.execute("UPDATE posts SET body = '', mediaJson = '[]', linkUrl = NULL, deletedAt = $1 WHERE authorId = $2", [Date.now(), id]);
   await transaction.execute("UPDATE reactions SET walletAddress = $1 WHERE userId = $2", [zeroWallet, id]);
   await transaction.execute("UPDATE founding_curators SET walletAddress = $1 WHERE userId = $2", [zeroWallet, id]);
   await transaction.execute(
@@ -457,7 +462,7 @@ export const Batches = {
   },
 };
 
-export type ReportTarget = "stream" | "moment" | "user";
+export type ReportTarget = "stream" | "moment" | "post" | "user";
 
 export const Safety = {
   async report(reporterId: string, targetType: ReportTarget, targetId: string, reason: string, details?: string): Promise<string> {

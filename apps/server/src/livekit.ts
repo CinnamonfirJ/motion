@@ -1,4 +1,4 @@
-import { AccessToken, type VideoGrant } from "livekit-server-sdk";
+import { AccessToken, TrackSource, type VideoGrant } from "livekit-server-sdk";
 import { env, livekitConfigured } from "./env.js";
 import type { User } from "@ennoia/core";
 
@@ -11,7 +11,7 @@ import type { User } from "@ennoia/core";
  * configured the app uses the fake-live looping player instead (see streamView `mode`).
  */
 
-export type LiveKitRole = "host" | "viewer";
+export type LiveKitRole = "host" | "speaker" | "viewer";
 
 export interface LiveKitToken {
   url: string;
@@ -29,7 +29,7 @@ export function roomNameForStream(streamId: string): string {
 }
 
 /** Mint a room-scoped access token for a user. Host => publish; viewer => subscribe-only. */
-export async function roomTokenFor(user: User, streamId: string, role: LiveKitRole): Promise<LiveKitToken> {
+export async function roomTokenFor(user: User, streamId: string, role: LiveKitRole, canCamera = false, canScreenShare = false): Promise<LiveKitToken> {
   if (!livekitConfigured()) throw new Error("livekit-not-configured");
   const room = roomNameForStream(streamId);
 
@@ -43,9 +43,16 @@ export async function roomTokenFor(user: User, streamId: string, role: LiveKitRo
     room,
     roomJoin: true,
     canSubscribe: true,
-    canPublish: role === "host",
+    canPublish: role !== "viewer",
     canPublishData: true, // reactions/heat can also ride the LiveKit data channel if desired
   };
+  if (role === "speaker") {
+    grant.canPublishSources = [
+      TrackSource.MICROPHONE,
+      ...(canCamera ? [TrackSource.CAMERA] : []),
+      ...(canScreenShare ? [TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO] : []),
+    ];
+  }
   at.addGrant(grant);
 
   return { url: env.LIVEKIT_URL, token: await at.toJwt(), room, role };

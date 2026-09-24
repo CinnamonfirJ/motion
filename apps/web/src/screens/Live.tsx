@@ -122,7 +122,7 @@ export function Live() {
       {/* video region (~65-72% on mobile) */}
       <div className="relative w-full bg-black" style={{ height: "min(72vh, 720px)" }}>
         {stream.mode === "livekit" ? (
-          <LiveKitStage streamId={stream.id} />
+          <LiveKitStage streamId={stream.id} hostId={stream.creator?.id ?? ""} />
         ) : (
           <LivePlayer src={stream.videoUrl} getPositionSec={positionSec} muted={muted} onToggleMute={() => setMuted((m) => !m)} />
         )}

@@ -7,6 +7,7 @@ import { env, privyConfigured, livekitConfigured, envioConfigured } from "./env.
 import { verifyPrivyToken } from "./privy.js";
 import { processAccountDeletionJob } from "./accountDeletion.js";
 import { roomTokenFor } from "./livekit.js";
+import { LiveRooms } from "./liveRooms.js";
 import { topCurators, trendingMoments, rewardHistory } from "./envio.js";
 import { createHmac, randomBytes } from "node:crypto";
 import { ingestReaction, config, demoFastForwardSettlement } from "./momentEngine.js";
@@ -16,6 +17,7 @@ import { momentView, streamView, userView, usd } from "./view.js";
 import { getChain, momentIdHash, toBytes32 } from "./chain.js";
 import { streamTimeMs } from "@ennoia/core";
 import { permanentMediaConfigured, startStreamRecording, stopStreamRecording } from "./media.js";
+import { registerSocialRoutes } from "./social.js";
 
 async function bearer(req: FastifyRequest): Promise<User | null> {
   const h = req.headers.authorization;
@@ -42,6 +44,7 @@ function viewerKey(req: FastifyRequest): string {
 }
 
 export async function registerRoutes(app: FastifyInstance) {
+  await registerSocialRoutes(app, bearer);
   app.get("/health", async () => ({ ok: true, chain: getChain().enabled ? "onchain" : "simulation" }));
 
   app.get("/time", async () => ({ serverTime: Date.now() }));
@@ -272,6 +275,7 @@ export async function registerRoutes(app: FastifyInstance) {
         return reply.code(502).send({ error: "recording-start-failed" });
       }
     }
+    if (livekitConfigured()) await LiveRooms.hostPresence(id, false);
     return { stream: await streamView(stream, 0) };
   });
 
@@ -283,9 +287,103 @@ export async function registerRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const stream = await Streams.byId(id);
     if (!stream) return reply.code(404).send({ error: "not found" });
-    const role = stream.creatorId === user.id ? "host" : "viewer";
-    const t = await roomTokenFor(user, id, role);
+    if (!stream.isLive) return reply.code(409).send({ error: "stream-ended" });
+    const speaker = await LiveRooms.speaker(id, user.id);
+    const role = stream.creatorId === user.id ? "host" : speaker?.status === "approved" ? "speaker" : "viewer";
+    const t = await roomTokenFor(user, id, role, speaker?.canCamera, speaker?.canScreenShare);
     return { url: t.url, token: t.token, room: t.room, role: t.role };
+  });
+
+  app.get("/streams/:id/live-room", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const { id } = req.params as { id: string };
+    const stream = await Streams.byId(id);
+    if (!stream) return reply.code(404).send({ error: "not-found" });
+    const state = await LiveRooms.state(id);
+    return {
+      ...state,
+      isLive: stream.isLive,
+      role: stream.creatorId === user.id ? "host" : state.speakers.find((speaker) => speaker.userId === user.id)?.status === "approved" ? "speaker" : "viewer",
+      mySpeaker: state.speakers.find((speaker) => speaker.userId === user.id) ?? null,
+      speakers: stream.creatorId === user.id ? state.speakers : state.speakers.filter((speaker) => speaker.status === "approved"),
+    };
+  });
+
+  app.post("/streams/:id/speaker-request", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const { id } = req.params as { id: string };
+    const stream = await Streams.byId(id);
+    if (!stream) return reply.code(404).send({ error: "not-found" });
+    if (!stream.isLive) return reply.code(409).send({ error: "stream-ended" });
+    if (stream.creatorId === user.id) return reply.code(400).send({ error: "host-cannot-request" });
+    const current = await LiveRooms.speaker(id, user.id);
+    if (current?.status === "approved" || current?.status === "invited") return reply.code(409).send({ error: "already-speaker-or-invited" });
+    await LiveRooms.setSpeaker(id, user.id, "requested");
+    return { ok: true };
+  });
+
+  app.post("/streams/:id/speakers/:userId/invite", async (req, reply) => {
+    const host = await bearer(req);
+    if (!host) return reply.code(401).send({ error: "unauthorized" });
+    const { id, userId } = req.params as { id: string; userId: string };
+    const stream = await Streams.byId(id);
+    if (!stream) return reply.code(404).send({ error: "not-found" });
+    if (stream.creatorId !== host.id) return reply.code(403).send({ error: "host-only" });
+    if (!stream.isLive) return reply.code(409).send({ error: "stream-ended" });
+    if (userId === host.id || !await Users.byId(userId)) return reply.code(404).send({ error: "user-not-found" });
+    await LiveRooms.setSpeaker(id, userId, "invited");
+    return { ok: true };
+  });
+
+  app.post("/streams/:id/speaker-invite/accept", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const { id } = req.params as { id: string };
+    const stream = await Streams.byId(id);
+    if (!stream?.isLive) return reply.code(409).send({ error: "stream-not-live" });
+    if ((await LiveRooms.speaker(id, user.id))?.status !== "invited") return reply.code(409).send({ error: "no-invitation" });
+    await LiveRooms.setSpeaker(id, user.id, "approved");
+    return { ok: true };
+  });
+
+  app.post("/streams/:id/speakers/:userId/approve", async (req, reply) => {
+    const host = await bearer(req);
+    if (!host) return reply.code(401).send({ error: "unauthorized" });
+    const { id, userId } = req.params as { id: string; userId: string };
+    const stream = await Streams.byId(id);
+    if (!stream?.isLive) return reply.code(409).send({ error: "stream-not-live" });
+    if (stream.creatorId !== host.id) return reply.code(403).send({ error: "host-only" });
+    if ((await LiveRooms.speaker(id, userId))?.status !== "requested") return reply.code(409).send({ error: "no-request" });
+    await LiveRooms.setSpeaker(id, userId, "approved");
+    return { ok: true };
+  });
+
+  app.patch("/streams/:id/speakers/:userId", async (req, reply) => {
+    const host = await bearer(req);
+    if (!host) return reply.code(401).send({ error: "unauthorized" });
+    const { id, userId } = req.params as { id: string; userId: string };
+    const stream = await Streams.byId(id);
+    if (!stream?.isLive) return reply.code(409).send({ error: "stream-not-live" });
+    if (stream.creatorId !== host.id) return reply.code(403).send({ error: "host-only" });
+    const speaker = await LiveRooms.speaker(id, userId);
+    if (speaker?.status !== "approved") return reply.code(409).send({ error: "not-speaker" });
+    const body = (req.body ?? {}) as { canCamera?: boolean; canScreenShare?: boolean };
+    if (typeof body.canCamera !== "boolean" && typeof body.canScreenShare !== "boolean") return reply.code(400).send({ error: "no-permission-change" });
+    await LiveRooms.setSpeaker(id, userId, "approved", body.canCamera ?? speaker.canCamera, body.canScreenShare ?? speaker.canScreenShare);
+    return { ok: true };
+  });
+
+  app.delete("/streams/:id/speakers/:userId", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const { id, userId } = req.params as { id: string; userId: string };
+    const stream = await Streams.byId(id);
+    if (!stream) return reply.code(404).send({ error: "not-found" });
+    if (stream.creatorId !== user.id && userId !== user.id) return reply.code(403).send({ error: "host-or-self-only" });
+    await LiveRooms.setSpeaker(id, userId, null);
+    return { ok: true };
   });
 
   app.post("/streams/:id/end", async (req, reply) => {
@@ -532,7 +630,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
     const body = (req.body ?? {}) as { targetType?: ReportTarget; targetId?: string; reason?: string; details?: string };
-    if (!body.targetType || !["stream", "moment", "user"].includes(body.targetType) || !body.targetId?.trim() || !body.reason?.trim()) {
+    if (!body.targetType || !["stream", "moment", "post", "user"].includes(body.targetType) || !body.targetId?.trim() || !body.reason?.trim()) {
       return reply.code(400).send({ error: "targetType, targetId, and reason are required" });
     }
     if (body.reason.length > 80 || (body.details?.length ?? 0) > 1000) return reply.code(400).send({ error: "report-too-long" });

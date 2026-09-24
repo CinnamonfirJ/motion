@@ -117,14 +117,15 @@ export function Live() {
   };
 
   if (!stream) return <Loading label="Joining live…" />;
-  const H = Math.min(height * 0.62, 640);
+  const isHost = stream.creator?.id === user?.id;
+  const H = Math.min(height * (isHost ? 0.78 : 0.62), isHost ? 820 : 640);
 
   return (
     <View style={{ flex: 1, backgroundColor: color.night }}>
       <View style={{ height: H, backgroundColor: "#000" }}>
         {stream.mode === "vod" ? (
           <VideoView player={player} style={{ flex: 1 }} contentFit="cover" nativeControls={false} />
-        ) : <LiveKitStage streamId={stream.id} />}
+        ) : <LiveKitStage streamId={stream.id} hostId={stream.creator?.id ?? ""} />}
         <SafeAreaView style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -132,7 +133,7 @@ export function Live() {
                 <Text style={{ color: color.text, fontSize: 18 }}>←</Text>
               </Pressable>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(0,0,0,0.45)", borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4 }}>
-                <Avatar name={stream.creator?.displayName ?? "?"} size={24} />
+                <Avatar name={stream.creator?.displayName ?? "?"} url={stream.creator?.avatarUrl} size={24} />
                 <Text style={{ color: color.text, ...type.label }}>{stream.creator?.displayName}</Text>
               </View>
             </View>
@@ -157,7 +158,7 @@ export function Live() {
         ) : null}
       </View>
 
-      {stream.creator?.id === user?.id ? (
+      {isHost ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="End live stream"
@@ -175,7 +176,7 @@ export function Live() {
         </Pressable>
       ) : null}
 
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
+      {isHost ? <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 16 }}><Text style={{ color: color.textSecondary, ...eyebrow(11) }}>You are hosting · {viewers} watching</Text></View> : <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
         {heatingUp ? <Text style={{ color: color.lime, ...eyebrow(11) }}>● Heating up</Text> : <View style={{ height: 16 }} />}
         <View style={{ flexDirection: "row", gap: 16 }}>
           {REACTIONS.map((r) => (
@@ -221,7 +222,7 @@ export function Live() {
           </Pressable>
         </View>
         <Text style={{ color: color.textMuted, ...type.micro }}>Tap to react</Text>
-      </View>
+      </View>}
       {toast ? (
         <View style={{ position: "absolute", bottom: 100, alignSelf: "center", borderWidth: 1, borderColor: color.success, backgroundColor: color.surface2, paddingHorizontal: 16, paddingVertical: 10 }}>
           <Text style={{ color: color.text, ...type.body }}>{toast}</Text>

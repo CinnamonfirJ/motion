@@ -81,6 +81,43 @@ export interface SyncDTO {
   recentWindowMs: number;
 }
 
+export interface LiveRoomDTO {
+  isLive: boolean;
+  hostConnected: boolean;
+  hostDisconnectedAt: number | null;
+  graceEndsAt: number | null;
+  role: "host" | "speaker" | "viewer";
+  mySpeaker: { userId: string; status: "requested" | "invited" | "approved"; canCamera: boolean; canScreenShare: boolean } | null;
+  speakers: { userId: string; status: "requested" | "invited" | "approved"; canCamera: boolean; canScreenShare: boolean }[];
+}
+export interface PostDTO {
+  id: string;
+  author: { id: string; displayName: string; handle: string; avatarUrl: string | null };
+  body: string;
+  media: string[];
+  linkUrl: string | null;
+  streamId: string | null;
+  momentId: string | null;
+  communityId: string | null;
+  replyToId: string | null;
+  quotePostId: string | null;
+  repostOfId: string | null;
+  createdAt: number;
+  likes: number;
+  replies: number;
+  reposts: number;
+  views: number;
+  liked: boolean;
+}
+export interface FeedItemDTO {
+  type: "post" | "stream" | "moment";
+  createdAt: number;
+  post?: PostDTO;
+  stream?: StreamDTO;
+  moment?: MomentDTO;
+}
+export interface CommunityDTO { id: string; slug: string; name: string; description: string; memberCount: number }
+
 export interface UnsignedTransactionDTO {
   to: `0x${string}`;
   data: `0x${string}`;
@@ -103,10 +140,39 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ amountMon }),
     }),
-  livekitToken: (streamId: string) => req<{ url: string; token: string; room: string; role: "host" | "viewer" }>(`/streams/${streamId}/livekit-token`, { method: "POST", body: "{}" }),
+  livekitToken: (streamId: string) => req<{ url: string; token: string; room: string; role: "host" | "speaker" | "viewer" }>(`/streams/${streamId}/livekit-token`, { method: "POST", body: "{}" }),
+  liveRoom: (id: string) => req<LiveRoomDTO>(`/streams/${id}/live-room`),
+  requestMic: (id: string) => req<{ ok: boolean }>(`/streams/${id}/speaker-request`, { method: "POST", body: "{}" }),
+  inviteSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}/invite`, { method: "POST", body: "{}" }),
+  acceptSpeakerInvite: (id: string) => req<{ ok: boolean }>(`/streams/${id}/speaker-invite/accept`, { method: "POST", body: "{}" }),
+  approveSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}/approve`, { method: "POST", body: "{}" }),
+  setSpeakerPermissions: (id: string, userId: string, permissions: { canCamera?: boolean; canScreenShare?: boolean }) =>
+    req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}`, { method: "PATCH", body: JSON.stringify(permissions) }),
+  removeSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}`, { method: "DELETE" }),
+  feed: (mode: "for-you" | "following", before?: number, communityId?: string) =>
+    req<{ items: FeedItemDTO[]; nextBefore: number | null }>(`/feed?${new URLSearchParams({ mode, ...(before ? { before: String(before) } : {}), ...(communityId ? { communityId } : {}) })}`),
+  post: (id: string) => req<{ post: PostDTO }>(`/posts/${id}`),
+  replies: (id: string) => req<{ posts: PostDTO[] }>(`/posts/${id}/replies`),
+  createPost: (input: { text?: string; uploadIds?: string[]; linkUrl?: string; streamId?: string; momentId?: string; communityId?: string; replyToId?: string; quotePostId?: string; repostOfId?: string }) =>
+    req<{ post: PostDTO }>("/posts", { method: "POST", body: JSON.stringify(input) }),
+  uploadPostMedia: (contentType: string, sizeBytes: number) =>
+    req<{ uploadId: string; uploadUrl: string; publicUrl: string; contentType: string }>("/media/post-upload", { method: "POST", body: JSON.stringify({ contentType, sizeBytes }) }),
+  viewPost: (id: string) => req<{ ok: boolean }>(`/posts/${id}/view`, { method: "POST", body: "{}" }),
+  likePost: (id: string) => req<{ ok: boolean }>(`/posts/${id}/like`, { method: "PUT", body: "{}" }),
+  unlikePost: (id: string) => req<{ ok: boolean }>(`/posts/${id}/like`, { method: "DELETE" }),
+  follow: (id: string) => req<{ ok: boolean }>(`/users/${id}/follow`, { method: "PUT", body: "{}" }),
+  unfollow: (id: string) => req<{ ok: boolean }>(`/users/${id}/follow`, { method: "DELETE" }),
+  userSocial: (id: string) => req<{ followers: number; following: number; posts: number; followedByMe: boolean }>(`/users/${id}/social`),
+  publicUser: (id: string) => req<{ user: { id: string; displayName: string; handle: string; avatarUrl: string | null } }>(`/users/${id}`),
+  userPosts: (id: string) => req<{ posts: PostDTO[] }>(`/users/${id}/posts`),
+  communities: () => req<{ communities: CommunityDTO[] }>("/communities"),
+  community: (id: string) => req<{ community: CommunityDTO & { ownerId: string; member: boolean } }>(`/communities/${id}`),
+  createCommunity: (name: string, description: string) => req<{ community: CommunityDTO }>("/communities", { method: "POST", body: JSON.stringify({ name, description }) }),
+  joinCommunity: (id: string) => req<{ ok: boolean }>(`/communities/${id}/join`, { method: "PUT", body: "{}" }),
+  leaveCommunity: (id: string) => req<{ ok: boolean }>(`/communities/${id}/join`, { method: "DELETE" }),
   createStream: (title: string) => req<{ stream: StreamDTO }>("/streams", { method: "POST", body: JSON.stringify({ title }) }),
   endStream: (streamId: string) => req<{ ok: boolean; endedAt: number }>(`/streams/${streamId}/end`, { method: "POST", body: "{}" }),
-  report: (targetType: "stream" | "moment" | "user", targetId: string, reason: string, details?: string) =>
+  report: (targetType: "stream" | "moment" | "post" | "user", targetId: string, reason: string, details?: string) =>
     req<{ reportId: string; status: string }>("/reports", { method: "POST", body: JSON.stringify({ targetType, targetId, reason, details }) }),
   blockUser: (userId: string) => req<{ ok: boolean }>(`/users/${userId}/block`, { method: "POST", body: "{}" }),
   deleteAccount: () => req<{ ok: boolean; onchainDataRetained: boolean }>("/me", { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE" }) }),
