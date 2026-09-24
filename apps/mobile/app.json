@@ -26,6 +26,11 @@
     "web": {
       "bundler": "metro"
     },
+    "extra": {
+      "eas": {
+        "projectId": "af8b6a80-3fd7-4b54-85cd-0f55190decba"
+      }
+    },
     "plugins": [
       "expo-video",
       "expo-image",
