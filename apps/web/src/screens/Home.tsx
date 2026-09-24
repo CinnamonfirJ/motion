@@ -37,8 +37,9 @@ export function Home() {
   const selectedCommunity = tab === "communities" ? communityId ?? undefined : undefined;
   const refresh = useCallback(async () => {
     try {
-      const [feed, live, recent] = await Promise.all([api.feed(mode, undefined, selectedCommunity), api.streams(), api.moments()]);
-      setItems(feed.items); setNextBefore(feed.nextBefore); setStreams(live.streams); setMoments(recent.moments.slice(0, 15)); setError(null);
+      // Render the feed as soon as its own request completes; composer options are independent.
+      const feed = await api.feed(mode, undefined, selectedCommunity);
+      setItems(feed.items); setNextBefore(feed.nextBefore); setError(null);
     } catch { setError("Feed could not refresh. Try again."); }
   }, [mode, selectedCommunity]);
 
@@ -46,9 +47,17 @@ export function Home() {
     setItems(null); setError(null);
     void refresh();
     realtime.connect(); realtime.subscribe("feed");
-    const off = realtime.on((event) => { if (event.t === "feed") void refresh(); });
-    return () => { off(); realtime.unsubscribe("feed"); };
+    let scheduled: ReturnType<typeof setTimeout> | null = null;
+    const off = realtime.on((event) => {
+      if (event.t === "feed" && !scheduled) scheduled = setTimeout(() => { scheduled = null; void refresh(); }, 750);
+    });
+    return () => { if (scheduled) clearTimeout(scheduled); off(); realtime.unsubscribe("feed"); };
   }, [refresh]);
+  useEffect(() => {
+    void Promise.all([api.streams(), api.moments()])
+      .then(([live, recent]) => { setStreams(live.streams); setMoments(recent.moments.slice(0, 15)); })
+      .catch(() => {}); // Optional composer embeds must not delay or hide the feed.
+  }, []);
   useEffect(() => { void api.communities().then((result) => setCommunities(result.communities)).catch(() => setCommunityError("Could not load communities.")); }, []);
   useEffect(() => {
     if (!communityId) { setMember(false); return; }

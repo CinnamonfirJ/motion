@@ -19,6 +19,24 @@ import { Streams } from "./store.js";
 
 async function main() {
   const app = Fastify({ logger: { level: "warn" } });
+  const requestTimers = new WeakMap<object, { startedAt: number; warning: NodeJS.Timeout }>();
+  app.addHook("onRequest", async (request) => {
+    if (request.headers.upgrade === "websocket") return;
+    const startedAt = performance.now();
+    const warning = setTimeout(() => {
+      request.log.warn({ method: request.method, route: request.routeOptions.url ?? "unknown", durationMs: Math.round(performance.now() - startedAt) }, "request still pending");
+    }, 10_000);
+    warning.unref();
+    requestTimers.set(request, { startedAt, warning });
+  });
+  app.addHook("onResponse", async (request, reply) => {
+    const timing = requestTimers.get(request);
+    if (!timing) return;
+    clearTimeout(timing.warning);
+    const durationMs = Math.round(performance.now() - timing.startedAt);
+    if (durationMs >= 2_000) request.log.warn({ method: request.method, route: request.routeOptions.url ?? "unknown", statusCode: reply.statusCode, durationMs }, "slow request");
+    requestTimers.delete(request);
+  });
   const allowedOrigins = new Set(
     env.IS_PRODUCTION
       ? env.CORS_ORIGINS
@@ -119,18 +137,25 @@ async function main() {
   console.log("");
 
   // Engine lifecycle loop (detection safety net + confirmation/clip/settlement advancement).
+  let tickRunning = false;
   setInterval(() => {
-    tick().catch((e) => console.error("tick error", e));
+    if (tickRunning) return;
+    tickRunning = true;
+    void tick().catch((e) => console.error("tick error", e)).finally(() => { tickRunning = false; });
   }, 1000);
 
   setInterval(() => {
     void processPendingAccountDeletions().catch((e) => console.error("account deletion retry error", e));
   }, 60_000);
 
+  let presenceRunning = false;
   setInterval(() => {
+    if (presenceRunning) return;
+    presenceRunning = true;
     void LiveRooms.reconcilePresence()
       .then(() => LiveRooms.endExpired())
-      .catch((e) => console.error("live room grace expiration error", e));
+      .catch((e) => console.error("live room grace expiration error", e))
+      .finally(() => { presenceRunning = false; });
   }, 15_000);
 
   // Demo participant driver.

@@ -319,9 +319,11 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!stream.isLive) return reply.code(409).send({ error: "stream-ended" });
     if (stream.creatorId === user.id) return reply.code(400).send({ error: "host-cannot-request" });
     const current = await LiveRooms.speaker(id, user.id);
-    if (current?.status === "approved" || current?.status === "invited") return reply.code(409).send({ error: "already-speaker-or-invited" });
+    // A repeated click or a stale room snapshot must not turn an existing invite into an error.
+    // In particular, an invite still needs to be accepted by the viewer.
+    if (current) return { ok: true, status: current.status };
     await LiveRooms.setSpeaker(id, user.id, "requested");
-    return { ok: true };
+    return { ok: true, status: "requested" };
   });
 
   app.post("/streams/:id/speakers/:userId/invite", async (req, reply) => {

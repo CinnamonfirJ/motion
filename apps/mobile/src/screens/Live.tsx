@@ -23,6 +23,8 @@ export function Live() {
   const route = useRoute<any>();
   const id: string = route.params.id;
   const [stream, setStream] = useState<StreamDTO | null>(null);
+  const [joinError, setJoinError] = useState(false);
+  const [joinAttempt, setJoinAttempt] = useState(0);
   const sync = useRef<SyncDTO | null>(null);
   const [viewers, setViewers] = useState(0);
   const [heatingUp, setHeatingUp] = useState(false);
@@ -46,21 +48,28 @@ export function Live() {
 
   useEffect(() => {
     let alive = true;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    setStream(null);
+    setJoinError(false);
     (async () => {
-      await realtime.syncClock();
-      const r = await api.stream(id);
+      // The stream response already includes a sync snapshot; clock refinement must not block joining.
+      void realtime.syncClock().catch(() => {});
+      const r = await api.stream(id, controller.signal);
       if (!alive) return;
       setStream(r.stream);
       sync.current = r.sync;
       setViewers(r.stream.viewerCount);
-    })().catch(() => nav.goBack());
+    })().catch(() => { if (alive) setJoinError(true); }).finally(() => clearTimeout(timeout));
     realtime.connect();
     realtime.subscribe(id);
     return () => {
       alive = false;
+      clearTimeout(timeout);
+      controller.abort();
       realtime.unsubscribe(id);
     };
-  }, [id]);
+  }, [id, joinAttempt]);
 
   // Seek to authoritative position + resync on foreground (PRD §35 backgrounding).
   useEffect(() => {
@@ -116,7 +125,9 @@ export function Live() {
     } catch {}
   };
 
-  if (!stream) return <Loading label="Joining live…" />;
+  if (!stream) return joinError
+    ? <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24, backgroundColor: color.night }}><Text style={{ color: color.textSecondary, ...type.body }}>The stream is taking too long to load.</Text><Pressable accessibilityRole="button" onPress={() => setJoinAttempt((attempt) => attempt + 1)} style={{ borderWidth: 1, borderColor: color.lime, padding: 12 }}><Text style={{ color: color.lime, ...eyebrow(11) }}>Retry joining</Text></Pressable></View>
+    : <Loading label="Joining live…" />;
   const isHost = stream.creator?.id === user?.id;
   const H = Math.min(height * (isHost ? 0.78 : 0.62), isHost ? 820 : 640);
 

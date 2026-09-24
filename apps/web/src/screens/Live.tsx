@@ -22,6 +22,8 @@ export function Live() {
   const { id = "" } = useParams();
   const nav = useNavigate();
   const [stream, setStream] = useState<StreamDTO | null>(null);
+  const [joinError, setJoinError] = useState(false);
+  const [joinAttempt, setJoinAttempt] = useState(0);
   const sync = useRef<SyncDTO | null>(null);
   const [muted, setMuted] = useState(true);
   const [viewerCount, setViewerCount] = useState(0);
@@ -37,21 +39,28 @@ export function Live() {
   // Load stream + clock sync.
   useEffect(() => {
     let alive = true;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    setStream(null);
+    setJoinError(false);
     (async () => {
-      await realtime.syncClock();
-      const r = await api.stream(id);
+      // The stream response already includes a sync snapshot; clock refinement must not block joining.
+      void realtime.syncClock().catch(() => {});
+      const r = await api.stream(id, controller.signal);
       if (!alive) return;
       setStream(r.stream);
       sync.current = r.sync;
       setViewerCount(r.stream.viewerCount);
-    })().catch(() => nav("/"));
+    })().catch(() => { if (alive) setJoinError(true); }).finally(() => clearTimeout(timeout));
     realtime.connect();
     realtime.subscribe(id);
     return () => {
       alive = false;
+      clearTimeout(timeout);
+      controller.abort();
       realtime.unsubscribe(id);
     };
-  }, [id]);
+  }, [id, joinAttempt]);
 
   // Realtime events.
   useEffect(() => {
@@ -110,8 +119,7 @@ export function Live() {
     return (
       <div data-theme="dark" className="min-h-screen grid place-items-center bg-night text-text">
         <div className="text-center">
-          <div className="mx-auto mb-3 h-8 w-8 rounded-full border-2 border-lime border-t-transparent animate-spin" />
-          <p className="text-body text-text-secondary">Joining live…</p>
+          {joinError ? <><p className="text-body text-text-secondary">The stream is taking too long to load.</p><button className="mt-4 border border-lime px-4 py-2 text-lime" onClick={() => setJoinAttempt((attempt) => attempt + 1)}>Retry joining</button></> : <><div className="mx-auto mb-3 h-8 w-8 rounded-full border-2 border-lime border-t-transparent animate-spin" /><p className="text-body text-text-secondary">Joining live…</p></>}
         </div>
       </div>
     );

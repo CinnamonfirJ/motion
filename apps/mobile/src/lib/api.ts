@@ -132,7 +132,7 @@ export const api = {
     req<{ token: string; user: UserDTO }>("/auth/privy", { method: "POST", body: JSON.stringify({ accessToken, displayName }) }),
   me: () => req<{ user: UserDTO; wallet: { address: string; network: string; onchain: boolean } }>("/me"),
   streams: () => req<{ streams: StreamDTO[] }>("/streams"),
-  stream: (id: string) => req<{ stream: StreamDTO; sync: SyncDTO; activeMoments: MomentDTO[] }>(`/streams/${id}`),
+  stream: (id: string, signal?: AbortSignal) => req<{ stream: StreamDTO; sync: SyncDTO; activeMoments: MomentDTO[] }>(`/streams/${id}`, { signal }),
   react: (streamId: string, type: string, clientStreamTimeMs: number, eventId: string, platform: string) =>
     req<{ ok: boolean }>("/reactions", { method: "POST", body: JSON.stringify({ streamId, type, clientStreamTimeMs, platform, eventId }) }),
   tip: (streamId: string, amountMon = "0.001") =>
@@ -140,9 +140,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ amountMon }),
     }),
-  livekitToken: (streamId: string) => req<{ url: string; token: string; room: string; role: "host" | "speaker" | "viewer" }>(`/streams/${streamId}/livekit-token`, { method: "POST", body: "{}" }),
+  livekitToken: (streamId: string, signal?: AbortSignal) => req<{ url: string; token: string; room: string; role: "host" | "speaker" | "viewer" }>(`/streams/${streamId}/livekit-token`, { method: "POST", body: "{}", signal }),
   liveRoom: (id: string) => req<LiveRoomDTO>(`/streams/${id}/live-room`),
-  requestMic: (id: string) => req<{ ok: boolean }>(`/streams/${id}/speaker-request`, { method: "POST", body: "{}" }),
+  requestMic: (id: string) => req<{ ok: boolean; status: "requested" | "invited" | "approved" }>(`/streams/${id}/speaker-request`, { method: "POST", body: "{}" }),
   inviteSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}/invite`, { method: "POST", body: "{}" }),
   acceptSpeakerInvite: (id: string) => req<{ ok: boolean }>(`/streams/${id}/speaker-invite/accept`, { method: "POST", body: "{}" }),
   approveSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/speakers/${userId}/approve`, { method: "POST", body: "{}" }),
