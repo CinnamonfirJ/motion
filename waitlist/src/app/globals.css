@@ -1,0 +1,154 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ENNOIA palette and semantic tokens (same values as the main web app).
+   Light is :root; dark is [data-theme="dark"], set before paint by the layout script. */
+:root {
+  --color-4: #50c8ff;
+  --color-9: #5028dc;
+  --color-11: #8c64ff;
+  --color-14: #dc78ff;
+
+  color-scheme: light;
+  --c-night: #f6f5fb;
+  --c-surface1: #ffffff;
+  --c-surface2: #f1f0f8;
+  --c-surface3: #e7e5f2;
+  --c-border: #e2e0ee;
+  --c-border-strong: #c9c4e4;
+  --c-text: #1a1826;
+  --c-text-secondary: #5a5570;
+  --c-text-muted: #8a85a0;
+  --c-text-disabled: #b4afc6;
+  --c-leaf: var(--color-9);
+  --scaffold-line: rgba(80, 40, 220, 0.1);
+  --scaffold-dot: rgba(80, 40, 220, 0.12);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --c-night: #000000;
+  --c-surface1: #28283c;
+  --c-surface2: #323248;
+  --c-surface3: #3c3c54;
+  --c-border: #505064;
+  --c-border-strong: #6450a0;
+  --c-text: #ffffff;
+  --c-text-secondary: #a0a0b4;
+  --c-text-muted: #78788c;
+  --c-text-disabled: #6e6e82;
+  --c-leaf: #8c64ff;
+  --scaffold-line: rgba(140, 100, 255, 0.1);
+  --scaffold-dot: rgba(140, 100, 255, 0.14);
+}
+
+body {
+  margin: 0;
+  background: var(--c-night);
+  color: var(--c-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--c-leaf);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.celebration-gradient {
+  background-image: linear-gradient(135deg, var(--color-9) 0%, var(--color-11) 50%, var(--color-14) 100%);
+}
+
+.hatch {
+  background-image: repeating-linear-gradient(-45deg, var(--scaffold-line) 0, var(--scaffold-line) 1px, transparent 1px, transparent 7px);
+}
+.dotgrid {
+  background-image: radial-gradient(var(--scaffold-dot) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.eyebrow {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+.plusmark {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  color: var(--c-leaf);
+  opacity: 0.8;
+  pointer-events: none;
+}
+.plusmark::before,
+.plusmark::after {
+  content: "";
+  position: absolute;
+  background: currentColor;
+}
+.plusmark::before {
+  left: 50%;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  transform: translateX(-50%);
+}
+.plusmark::after {
+  top: 50%;
+  left: 0;
+  height: 1px;
+  width: 100%;
+  transform: translateY(-50%);
+}
+
+/* Scroll reveal: `useReveal` adds .is-in when an element enters view. */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 700ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+.gradient-text {
+  background-image: linear-gradient(90deg, var(--color-9), var(--color-11), var(--color-14), var(--color-11), var(--color-9));
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.aurora-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.28;
+  pointer-events: none;
+}
+[data-theme="dark"] .aurora-blob {
+  opacity: 0.45;
+}
+/* Frosted surfaces over the hero glow (Tailwind 3 cannot alpha a var() color). */
+.glass {
+  background: color-mix(in srgb, var(--c-surface1) 86%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.header-glass {
+  background: color-mix(in srgb, var(--c-night) 80%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
