@@ -28,6 +28,10 @@ const s3 = env.R2_ENDPOINT && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY
       region: "auto",
       forcePathStyle: true,
       credentials: { accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY },
+      // R2 doesn't support the AWS SDK v3 default flexible checksums, which otherwise inject an
+      // (empty-body) x-amz-checksum-crc32 into presigned PUT URLs and make browser uploads fail.
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED",
     })
   : null;
 

@@ -28,6 +28,9 @@ function s3Client(): S3Client {
     region: env.LIVEKIT_EGRESS_REGION || "auto",
     forcePathStyle: true,
     credentials: { accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY },
+    // R2 rejects the AWS SDK v3 default flexible checksums; keep them off for compatibility.
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
   });
 }
 
