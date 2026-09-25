@@ -6,34 +6,42 @@ import { useSession } from "../session";
 import { Avatar } from "./ui";
 import { color, eyebrow, type } from "../theme";
 
+type ChatMsg = ChatMessageDTO & { clientId?: string; pending?: boolean; failed?: boolean };
+const newClientId = () => `c_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
 /**
- * Mobile live chat. Inverted FlatList (virtualized) keeps newest at the bottom and sticks there
- * unless the reader scrolls up (then a "new messages" pill appears). Host/author can delete.
- * Designed to live in a bottom sheet so the stream stays visible above it.
+ * Mobile live chat. Optimistic local echo → POST with clientId → canonical broadcast reconciles by
+ * clientId. Inverted FlatList (virtualized), newest at bottom, host/author delete, reconnect resync.
  */
 export function LiveChat({ streamId, isHost, onlineCount, onClose }: { streamId: string; isHost: boolean; onlineCount?: number; onClose?: () => void }) {
   const { user } = useSession();
-  const [messages, setMessages] = useState<ChatMessageDTO[]>([]); // newest-first (inverted list)
+  const [messages, setMessages] = useState<ChatMsg[]>([]); // newest-first (inverted list)
   const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [unread, setUnread] = useState(0);
-  const listRef = useRef<FlatList<ChatMessageDTO>>(null);
+  const listRef = useRef<FlatList<ChatMsg>>(null);
 
   useEffect(() => {
     let alive = true;
-    api.chatHistory(streamId)
-      .then((r) => { if (alive) setMessages([...r.messages].reverse()); })
+    const load = () => api.chatHistory(streamId)
+      .then((r) => { if (!alive) return; const hist = [...r.messages].reverse(); setMessages((prev) => [...prev.filter((m) => m.pending || m.failed).filter((p) => !hist.some((h) => h.id === p.id)), ...hist]); })
       .catch(() => { if (alive) setError("Couldn't load chat. It'll catch up in a moment."); });
-    return () => { alive = false; };
+    void load();
+    const off = realtime.on((ev: any) => { if (ev?.t === "hello") void load(); }); // reconnect resync
+    return () => { alive = false; off(); };
   }, [streamId]);
 
   useEffect(() => {
     return realtime.on((ev: any) => {
       if (ev.streamId !== streamId) return;
       if (ev.t === "chat") {
-        setMessages((prev) => (prev.some((m) => m.id === ev.message.id) ? prev : [{ ...ev.message, streamId }, ...prev].slice(0, 200)));
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === ev.message.id)) return prev;
+          const cid = ev.message.clientId as string | undefined;
+          if (cid) { const idx = prev.findIndex((m) => m.clientId === cid); if (idx >= 0) { const next = prev.slice(); next[idx] = { ...ev.message, streamId }; return next; } }
+          return [{ ...ev.message, streamId }, ...prev].slice(0, 200);
+        });
         setUnread((n) => (atBottom ? 0 : n + 1));
       } else if (ev.t === "chat_deleted") {
         setMessages((prev) => prev.filter((m) => m.id !== ev.messageId));
@@ -53,21 +61,31 @@ export function LiveChat({ streamId, isHost, onlineCount, onClose }: { streamId:
     setUnread(0);
   };
 
-  const send = async () => {
-    const body = draft.trim();
-    if (!body || sending) return;
-    setSending(true); setError(null);
-    try { await api.sendChat(streamId, body); setDraft(""); }
+  const deliver = async (clientId: string, body: string) => {
+    if (!user) return;
+    setError(null);
+    try { await api.sendChat(streamId, body, clientId); }
     catch (e: any) {
       const code = String(e?.message ?? e);
-      setError(code === "rate-limited" ? "Slow down a moment — you're chatting fast." : code === "too-long" ? "That message is a little long." : "Message didn't send. Try again in a moment.");
+      setError(code === "rate-limited" ? "Slow down a moment — you're chatting fast." : code === "too-long" ? "That message is a little long." : "Message couldn't send. Tap to retry.");
+      setMessages((prev) => prev.map((m) => (m.clientId === clientId ? { ...m, pending: false, failed: true } : m)));
     }
-    finally { setSending(false); }
   };
 
-  const remove = async (id: string) => {
-    setMessages((prev) => prev.filter((m) => m.id !== id));
-    try { await api.deleteChat(streamId, id); } catch { setError("Couldn't remove that message."); }
+  const send = () => {
+    const body = draft.trim();
+    if (!body || !user) return;
+    const clientId = newClientId();
+    const optimistic: ChatMsg = { id: clientId, clientId, streamId, body, createdAt: Date.now(), pending: true, author: { id: user.id, displayName: user.displayName, handle: user.handle, avatarUrl: user.avatarUrl } };
+    setMessages((prev) => [optimistic, ...prev].slice(0, 200));
+    setDraft("");
+    void deliver(clientId, body);
+  };
+
+  const remove = async (m: ChatMsg) => {
+    setMessages((prev) => prev.filter((x) => x.id !== m.id));
+    if (m.pending || m.failed) return;
+    try { await api.deleteChat(streamId, m.id); } catch { setError("Couldn't remove that message."); }
   };
 
   return (
@@ -91,14 +109,15 @@ export function LiveChat({ streamId, isHost, onlineCount, onClose }: { streamId:
           contentContainerStyle={{ padding: 12, gap: 8 }}
           ListEmptyComponent={<Text style={{ color: color.textMuted, ...eyebrow(10), textAlign: "center", marginTop: 24, transform: [{ scaleY: -1 }] }}>No messages yet — say hello.</Text>}
           renderItem={({ item }) => (
-            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, opacity: item.pending ? 0.6 : 1 }}>
               <Avatar name={item.author.displayName} url={item.author.avatarUrl} size={22} />
               <Text style={{ flex: 1, color: color.text, ...type.bodysm }}>
                 <Text style={{ color: color.lime, fontWeight: "600" }}>{item.author.displayName} </Text>
                 {item.body}
+                {item.failed ? <Text onPress={() => { setMessages((prev) => prev.map((x) => x.clientId === item.clientId ? { ...x, pending: true, failed: false } : x)); void deliver(item.clientId!, item.body); }} style={{ color: color.error, ...eyebrow(10) }}>  Failed · Retry</Text> : null}
               </Text>
               {(isHost || item.author.id === user?.id) ? (
-                <Pressable accessibilityLabel="Remove message" onPress={() => void remove(item.id)}><Text style={{ color: color.textMuted, fontSize: 16 }}>×</Text></Pressable>
+                <Pressable accessibilityLabel="Remove message" onPress={() => void remove(item)}><Text style={{ color: color.textMuted, fontSize: 16 }}>×</Text></Pressable>
               ) : null}
             </View>
           )}
@@ -122,10 +141,10 @@ export function LiveChat({ streamId, isHost, onlineCount, onClose }: { streamId:
               placeholderTextColor={color.textMuted}
               accessibilityLabel="Write a message"
               style={{ flex: 1, borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, color: color.text, paddingHorizontal: 12, paddingVertical: 8, ...type.bodysm }}
-              onSubmitEditing={() => void send()}
+              onSubmitEditing={() => send()}
               returnKeyType="send"
             />
-            <Pressable disabled={sending || !draft.trim()} onPress={() => void send()} style={{ backgroundColor: color.brand, paddingHorizontal: 14, paddingVertical: 10, opacity: sending || !draft.trim() ? 0.4 : 1 }}>
+            <Pressable disabled={!draft.trim()} onPress={() => send()} style={{ backgroundColor: color.brand, paddingHorizontal: 14, paddingVertical: 10, opacity: !draft.trim() ? 0.4 : 1 }}>
               <Text style={{ color: "#FFFFFF", ...eyebrow(10) }}>Send</Text>
             </Pressable>
           </View>

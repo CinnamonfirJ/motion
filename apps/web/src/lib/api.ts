@@ -266,7 +266,7 @@ export const api = {
   removeSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(speakerPath(id, userId), { method: "DELETE" }),
   chatHistory: (id: string, before?: number, signal?: AbortSignal) =>
     req<{ messages: ChatMessageDTO[] }>(`/streams/${id}/chat?${new URLSearchParams({ ...(before ? { before: String(before) } : {}) })}`, { signal }),
-  sendChat: (id: string, body: string) => req<{ ok: boolean; message: ChatMessageDTO }>(`/streams/${id}/chat`, { method: "POST", body: JSON.stringify({ body }) }),
+  sendChat: (id: string, body: string, clientId?: string) => req<{ ok: boolean; message: ChatMessageDTO }>(`/streams/${id}/chat`, { method: "POST", body: JSON.stringify({ body, clientId }) }),
   deleteChat: (id: string, messageId: string) => req<{ ok: boolean }>(`/streams/${id}/chat/${messageId}`, { method: "DELETE" }),
   feed: (mode: "for-you" | "following", before?: number, communityId?: string) =>
     req<{ items: FeedItemDTO[]; nextBefore: number | null }>(`/feed?${new URLSearchParams({ mode, ...(before ? { before: String(before) } : {}), ...(communityId ? { communityId } : {}) })}`),

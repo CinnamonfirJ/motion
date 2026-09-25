@@ -175,7 +175,7 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
     const eyebrow = "font-mono text-micro uppercase tracking-[0.14em] text-text-secondary";
     const controls = [
       { icon: I.invite, title: "Invite Guest", sub: "Invite someone to join your stream" as string, badge: undefined as number | undefined },
-      { icon: I.mic, title: "Request Mic", sub: "View and manage mic requests", badge: requested.length || undefined },
+      { icon: I.mic, title: "Mic Requests", sub: "View and manage mic requests", badge: requested.length || undefined },
       { icon: I.shield, title: "Moderation", sub: "Ban, timeout, or manage users", badge: undefined },
       { icon: I.gear, title: "Stream Settings", sub: "Title, category, tags, quality", badge: undefined },
       { icon: I.chart, title: "Analytics", sub: "View stream performance", badge: undefined },
@@ -262,7 +262,7 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
               {canCamera && ctrlBtn(I.cam, "Camera", () => void act(() => localParticipant.setCameraEnabled(!isCameraEnabled), "Camera"), { active: isCameraEnabled })}
               {canScreen && ctrlBtn(I.screen, "Share", () => void act(() => localParticipant.setScreenShareEnabled(!isScreenShareEnabled), "Screen sharing"), { active: isScreenShareEnabled })}
               {ctrlBtn(I.invite, "Invite Guest", undefined)}
-              {ctrlBtn(I.mic, "Request Mic", undefined, { badge: requested.length || undefined })}
+              {ctrlBtn(I.mic, "Mic Requests", undefined, { badge: requested.length || undefined })}
               {ctrlBtn(I.more, "More", undefined)}
               <div className="ml-auto flex items-center gap-2">
                 <span className={`${S.primary} inline-flex items-center gap-1.5 px-3 py-2 font-mono text-micro uppercase tracking-[0.1em]`}><span className="h-1.5 w-1.5 bg-white" />Live</span>

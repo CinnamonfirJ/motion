@@ -14,6 +14,7 @@ class Realtime {
   private subscribed = new Set<string>();
   private clockOffset = 0;
   private reconnectTimer: any = null;
+  private watchdog: any = null;
 
   connect() {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
@@ -23,21 +24,35 @@ class Realtime {
     ws.onopen = () => {
       if (token) ws.send(JSON.stringify({ type: "auth", token }));
       for (const s of this.subscribed) ws.send(JSON.stringify({ type: "subscribe", streamId: s }));
+      this.armWatchdog();
     };
     ws.onmessage = (e) => {
+      // Any inbound frame proves the socket is alive (server pings every 25s). If nothing arrives
+      // for 45s the socket is half-open — force a reconnect so realtime never silently stalls.
+      this.armWatchdog();
       let msg: any;
       try {
         msg = JSON.parse(e.data);
       } catch {
         return;
       }
+      if (msg?.t === "ping") { try { ws.send(JSON.stringify({ type: "pong" })); } catch { /* ignore */ } return; }
       for (const h of this.handlers) h(msg);
     };
     ws.onclose = () => {
       this.ws = null;
+      this.clearWatchdog();
       this.scheduleReconnect();
     };
     ws.onerror = () => ws.close();
+  }
+
+  private armWatchdog() {
+    this.clearWatchdog();
+    this.watchdog = setTimeout(() => { try { this.ws?.close(); } catch { /* ignore */ } }, 45_000);
+  }
+  private clearWatchdog() {
+    if (this.watchdog) { clearTimeout(this.watchdog); this.watchdog = null; }
   }
 
   private scheduleReconnect() {

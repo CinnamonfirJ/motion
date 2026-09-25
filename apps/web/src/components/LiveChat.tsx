@@ -5,39 +5,64 @@ import { realtime } from "../lib/realtime";
 import { useSession } from "../state/session";
 import { Avatar } from "./ui";
 
+type ChatMsg = ChatMessageDTO & { clientId?: string; pending?: boolean; failed?: boolean };
+
+const newClientId = () =>
+  (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `c_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+
 /**
- * Live text chat — ENNOIA's sharp/mono language, works on the dark Live surface.
- * Behaviour: history load → realtime append; auto-scroll unless the reader has scrolled up
- * (then a "new messages" pill appears); host/author delete; empty/rate-limit/error states.
- * Reactions remain the reward-bearing signal; chat is the room conversation.
+ * Live text chat — ENNOIA's sharp/mono language.
+ * Realtime path: optimistic local echo (<100ms) → POST with a clientId → server broadcasts the
+ * canonical message over the WebSocket → we reconcile by clientId (dedup). Persistence is async on
+ * the server, so a slow DB write never delays delivery. On reconnect we re-sync history so nothing
+ * is lost and nothing duplicates.
  */
 export function LiveChat({ streamId, isHost, onlineCount, className = "" }: { streamId: string; isHost: boolean; onlineCount?: number; className?: string }) {
   const { user } = useSession();
-  const [messages, setMessages] = useState<ChatMessageDTO[]>([]);
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
   const [unread, setUnread] = useState(0);
   const scroller = useRef<HTMLDivElement>(null);
 
-  // History (once per stream).
+  /** Merge server history with local state, de-duplicating by server id and keeping pending sends. */
+  const mergeHistory = useCallback((history: ChatMessageDTO[]) => {
+    setMessages((prev) => {
+      const pending = prev.filter((m) => m.pending || m.failed);
+      const byId = new Set(history.map((m) => m.id));
+      const keptPending = pending.filter((p) => !history.some((h) => h.id === p.id));
+      const merged = [...history.filter((m) => byId.has(m.id)), ...keptPending];
+      return merged;
+    });
+  }, []);
+
+  // Initial history + re-sync on (re)connect (server sends `hello` on every connect).
   useEffect(() => {
     let active = true;
-    const controller = new AbortController();
-    setMessages([]);
-    api.chatHistory(streamId, undefined, controller.signal)
-      .then((r) => { if (active) setMessages(r.messages); })
-      .catch(() => { if (active) setError("Couldn't load chat. It'll catch up in a moment."); });
-    return () => { active = false; controller.abort(); };
-  }, [streamId]);
+    const load = () => api.chatHistory(streamId).then((r) => { if (active) mergeHistory(r.messages); }).catch(() => { if (active) setError("Couldn't load chat. It'll catch up in a moment."); });
+    void load();
+    const off = realtime.on((ev: any) => { if (ev?.t === "hello") void load(); });
+    return () => { active = false; off(); };
+  }, [streamId, mergeHistory]);
 
-  // Realtime append / delete.
+  // Realtime append / reconcile / delete.
   useEffect(() => {
-    return realtime.on((ev) => {
-      if (ev.streamId !== streamId) return;
-      if (ev.t === "chat") setMessages((prev) => (prev.some((m) => m.id === ev.message.id) ? prev : [...prev.slice(-199), { ...ev.message, streamId }]));
-      else if (ev.t === "chat_deleted") setMessages((prev) => prev.filter((m) => m.id !== ev.messageId));
+    return realtime.on((ev: any) => {
+      if (ev?.t === "chat" && ev.streamId === streamId) {
+        if (import.meta.env.DEV && ev.serverBroadcastAt) console.debug(`[chat] delivery ${Date.now() - ev.serverBroadcastAt}ms (broadcast→receive)`);
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === ev.message.id)) return prev; // already have canonical
+          const cid = ev.message.clientId as string | undefined;
+          if (cid) {
+            const idx = prev.findIndex((m) => m.clientId === cid);
+            if (idx >= 0) { const next = prev.slice(); next[idx] = { ...ev.message, streamId }; return next; } // reconcile optimistic
+          }
+          return [...prev.slice(-199), { ...ev.message, streamId }];
+        });
+      } else if (ev?.t === "chat_deleted" && ev.streamId === streamId) {
+        setMessages((prev) => prev.filter((m) => m.id !== ev.messageId));
+      }
     });
   }, [streamId]);
 
@@ -47,7 +72,6 @@ export function LiveChat({ streamId, isHost, onlineCount, className = "" }: { st
     return el.scrollHeight - el.scrollTop - el.clientHeight < 48;
   };
 
-  // Keep pinned to bottom as messages arrive; otherwise count unread.
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
@@ -69,23 +93,40 @@ export function LiveChat({ streamId, isHost, onlineCount, className = "" }: { st
     setUnread(0);
   };
 
-  const send = async () => {
-    const body = draft.trim();
-    if (!body || sending) return;
-    setSending(true); setError(null);
+  const deliver = useCallback(async (clientId: string, body: string) => {
+    if (!user) return;
+    setError(null);
     try {
-      await api.sendChat(streamId, body); // appended via realtime broadcast
-      setDraft("");
-      setPinnedToBottom(true);
+      await api.sendChat(streamId, body, clientId); // canonical arrives via broadcast → reconciles
     } catch (e: any) {
       const code = String(e?.message ?? e);
-      setError(code === "rate-limited" ? "Slow down a moment — you're chatting fast." : code === "too-long" ? "That message is a little long." : "Message didn't send. Try again in a moment.");
-    } finally { setSending(false); }
+      if (code === "rate-limited") setError("Slow down a moment — you're chatting fast.");
+      else if (code === "too-long") setError("That message is a little long.");
+      else setError("Message couldn't send. Retry.");
+      setMessages((prev) => prev.map((m) => (m.clientId === clientId ? { ...m, pending: false, failed: true } : m)));
+    }
+  }, [streamId, user]);
+
+  const send = () => {
+    const body = draft.trim();
+    if (!body || !user) return;
+    const clientId = newClientId();
+    const optimistic: ChatMsg = { id: clientId, clientId, streamId, body, createdAt: Date.now(), pending: true, author: { id: user.id, displayName: user.displayName, handle: user.handle, avatarUrl: user.avatarUrl } };
+    setMessages((prev) => [...prev.slice(-199), optimistic]); // <100ms local echo
+    setDraft("");
+    setPinnedToBottom(true);
+    void deliver(clientId, body);
   };
 
-  const remove = async (id: string) => {
-    setMessages((prev) => prev.filter((m) => m.id !== id)); // optimistic
-    try { await api.deleteChat(streamId, id); } catch { setError("Couldn't remove that message."); }
+  const retry = (m: ChatMsg) => {
+    setMessages((prev) => prev.map((x) => (x.clientId === m.clientId ? { ...x, pending: true, failed: false } : x)));
+    void deliver(m.clientId!, m.body);
+  };
+
+  const remove = async (m: ChatMsg) => {
+    setMessages((prev) => prev.filter((x) => x.id !== m.id)); // optimistic removal
+    if (m.pending || m.failed) return; // never persisted server-side
+    try { await api.deleteChat(streamId, m.id); } catch { setError("Couldn't remove that message."); }
   };
 
   return (
@@ -99,14 +140,15 @@ export function LiveChat({ streamId, isHost, onlineCount, className = "" }: { st
         <div ref={scroller} onScroll={onScroll} className="absolute inset-0 space-y-2 overflow-y-auto px-3 py-3" role="log" aria-live="polite" aria-relevant="additions">
           {messages.length === 0 && <p className="mt-6 text-center font-mono text-micro uppercase tracking-[0.1em] text-text-muted">No messages yet — say hello.</p>}
           {messages.map((m) => (
-            <div key={m.id} className="group flex items-start gap-2">
+            <div key={m.id} className={`group flex items-start gap-2 ${m.pending ? "opacity-60" : ""}`}>
               <Link to={`/users/${m.author.id}`} className="mt-0.5 shrink-0"><Avatar name={m.author.displayName} url={m.author.avatarUrl} size={22} /></Link>
               <p className="min-w-0 flex-1 break-words text-bodysm text-text-secondary">
                 <Link to={`/users/${m.author.id}`} className="font-semibold text-leaf hover:underline">{m.author.displayName}</Link>{" "}
                 <span className="text-text">{m.body}</span>
+                {m.failed && <button onClick={() => retry(m)} className="ml-2 font-mono text-micro uppercase tracking-[0.1em] text-error hover:underline">Failed · Retry</button>}
               </p>
               {(isHost || m.author.id === user?.id) && (
-                <button onClick={() => void remove(m.id)} aria-label="Remove message" className="shrink-0 px-1 font-mono text-micro text-text-muted opacity-0 transition-opacity hover:text-error group-hover:opacity-100">×</button>
+                <button onClick={() => void remove(m)} aria-label="Remove message" className="shrink-0 px-1 font-mono text-micro text-text-muted opacity-0 transition-opacity hover:text-error group-hover:opacity-100">×</button>
               )}
             </div>
           ))}
@@ -121,7 +163,7 @@ export function LiveChat({ streamId, isHost, onlineCount, className = "" }: { st
       <footer className="border-t border-border p-2">
         {error && <p role="alert" className="mb-1 px-1 text-micro text-error">{error}</p>}
         {user ? (
-          <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void send(); }}>
+          <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); send(); }}>
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -130,7 +172,7 @@ export function LiveChat({ streamId, isHost, onlineCount, className = "" }: { st
               aria-label="Write a message"
               className="min-w-0 flex-1 border border-border bg-surface2 px-3 py-2 text-bodysm text-text placeholder:text-text-muted focus:border-borderStrong focus:outline-none"
             />
-            <button type="submit" disabled={sending || !draft.trim()} className="shrink-0 bg-brand px-3 py-2 font-mono text-micro uppercase tracking-[0.1em] text-white hover:bg-brandHover disabled:opacity-40">Send</button>
+            <button type="submit" disabled={!draft.trim()} className="shrink-0 bg-brand px-3 py-2 font-mono text-micro uppercase tracking-[0.1em] text-white hover:bg-brandHover disabled:opacity-40">Send</button>
           </form>
         ) : (
           <p className="px-1 py-1 font-mono text-micro uppercase tracking-[0.1em] text-text-muted">Sign in to join the chat.</p>

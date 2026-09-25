@@ -107,6 +107,8 @@ async function main() {
     socket.on("message", (raw: any) => {
       try {
         const msg = JSON.parse(raw.toString());
+        hub.touch(conn); // any inbound frame (incl. pong) keeps the connection alive
+        if (msg.type === "pong") return;
         if (msg.type === "auth" && typeof msg.token === "string") {
           const claims = verifyToken(msg.token);
           if (!claims) return socket.send(JSON.stringify({ t: "auth", ok: false }));
@@ -135,6 +137,10 @@ async function main() {
   console.log(`  Analytics:  ${envioConfigured() ? "Envio indexer" : "database aggregates"}`);
   if (!chainConfigured() && chain.enabled) console.log("  (chain enabled via deployments file)");
   console.log("");
+
+  // WebSocket keepalive — pings every 25s keep proxies from idle-closing connections and let
+  // both sides detect dead sockets fast (root-cause fix for the ~30s realtime delay).
+  setInterval(() => hub.heartbeat(), 25_000);
 
   // Engine lifecycle loop (detection safety net + confirmation/clip/settlement advancement).
   let tickRunning = false;

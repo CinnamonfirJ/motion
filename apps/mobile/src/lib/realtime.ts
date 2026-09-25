@@ -10,6 +10,7 @@ class Realtime {
   private subscribed = new Set<string>();
   private clockOffset = 0;
   private timer: any = null;
+  private watchdog: any = null;
 
   connect() {
     if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) return;
@@ -18,22 +19,28 @@ class Realtime {
     this.ws.onopen = () => {
       if (token) this.ws?.send(JSON.stringify({ type: "auth", token }));
       for (const s of this.subscribed) this.ws?.send(JSON.stringify({ type: "subscribe", streamId: s }));
+      this.arm();
     };
     this.ws.onmessage = (e) => {
+      this.arm(); // any inbound frame proves the socket is alive (server pings every 25s)
       let msg: any;
       try {
         msg = JSON.parse(e.data as string);
       } catch {
         return;
       }
+      if (msg?.t === "ping") { try { this.ws?.send(JSON.stringify({ type: "pong" })); } catch {} return; }
       for (const h of this.handlers) h(msg);
     };
     this.ws.onclose = () => {
       this.ws = null;
+      this.clear();
       if (!this.timer) this.timer = setTimeout(() => ((this.timer = null), this.connect()), 1500);
     };
     this.ws.onerror = () => this.ws?.close();
   }
+  private arm() { this.clear(); this.watchdog = setTimeout(() => { try { this.ws?.close(); } catch {} }, 45_000); }
+  private clear() { if (this.watchdog) { clearTimeout(this.watchdog); this.watchdog = null; } }
   subscribe(id: string) {
     this.subscribed.add(id);
     if (this.ws?.readyState === 1) this.ws.send(JSON.stringify({ type: "subscribe", streamId: id }));

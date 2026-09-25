@@ -23,29 +23,56 @@ export type ServerEvent =
   | { t: "settlement"; momentId: string; status: string; txHash: string | null }
   | { t: "viewers"; streamId: string; count: number }
   | { t: "live_room"; streamId: string }
-  | { t: "chat"; streamId: string; message: { id: string; body: string; createdAt: number; author: { id: string; displayName: string; handle: string; avatarUrl: string | null } } }
+  | { t: "chat"; streamId: string; serverBroadcastAt?: number; message: { id: string; body: string; createdAt: number; clientId?: string; author: { id: string; displayName: string; handle: string; avatarUrl: string | null } } }
   | { t: "chat_deleted"; streamId: string; messageId: string }
+  | { t: "ping"; serverTime: number }
   | { t: "feed"; postId: string };
 
 interface Conn {
   ws: SocketLike;
   userId: string | null;
   streams: Set<string>;
+  lastSeen: number;
 }
+
+const STALE_MS = 60_000;
 
 class Hub {
   private conns = new Set<Conn>();
 
   add(ws: SocketLike, userId: string | null): Conn {
-    const conn: Conn = { ws, userId, streams: new Set() };
+    const conn: Conn = { ws, userId, streams: new Set(), lastSeen: Date.now() };
     this.conns.add(conn);
     ws.on("close", () => this.conns.delete(conn));
     ws.on("error", () => this.conns.delete(conn));
     return conn;
   }
 
+  /** Any inbound frame (subscribe/auth/pong) marks the connection alive. */
+  touch(conn: Conn): void {
+    conn.lastSeen = Date.now();
+  }
+
+  /**
+   * Keepalive: push a ping to every connection and drop ones that have gone silent past the
+   * stale window. Prevents proxy idle-close leaving half-open sockets (the ~30s chat delay).
+   */
+  heartbeat(): void {
+    const now = Date.now();
+    const payload = JSON.stringify({ t: "ping", serverTime: now } satisfies ServerEvent);
+    for (const c of this.conns) {
+      if (now - c.lastSeen > STALE_MS) {
+        try { c.ws.close(4000, "stale"); } catch { /* ignore */ }
+        this.conns.delete(c);
+        continue;
+      }
+      this.safeSend(c, payload);
+    }
+  }
+
   authenticate(conn: Conn, userId: string): void {
     conn.userId = userId;
+    conn.lastSeen = Date.now();
   }
 
   subscribe(conn: Conn, streamId: string) {

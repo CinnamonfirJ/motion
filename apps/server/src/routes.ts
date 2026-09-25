@@ -429,13 +429,17 @@ export async function registerRoutes(app: FastifyInstance) {
     const stream = await Streams.byId(id);
     if (!stream) return reply.code(404).send({ error: "not found" });
     if (!stream.isLive) return reply.code(409).send({ error: "stream-ended" });
-    const body = (req.body ?? {}) as { body?: string };
-    const result = await LiveChat.send(id, user, String(body.body ?? ""));
+    const body = (req.body ?? {}) as { body?: string; clientId?: string };
+    const result = LiveChat.build(id, user, String(body.body ?? ""), typeof body.clientId === "string" ? body.clientId : undefined);
     if (!result.ok) {
       return reply.code(result.error === "rate-limited" ? 429 : 400).send({ error: result.error, maxLen: CHAT_MAX_LEN });
     }
-    hub.broadcastStream(id, { t: "chat", streamId: id, message: { id: result.message.id, body: result.message.body, createdAt: result.message.createdAt, author: result.message.author } });
-    return { ok: true, message: result.message };
+    const m = result.message;
+    // Broadcast FIRST (in-memory, instant), then persist asynchronously so a slow DB write can
+    // never delay realtime delivery. clientId lets the sender reconcile its optimistic message.
+    hub.broadcastStream(id, { t: "chat", streamId: id, serverBroadcastAt: Date.now(), message: { id: m.id, body: m.body, createdAt: m.createdAt, clientId: m.clientId, author: m.author } });
+    void LiveChat.persist(m).catch((e) => req.log.error({ e, streamId: id }, "chat persist failed"));
+    return { ok: true, message: m };
   });
 
   app.delete("/streams/:id/chat/:messageId", async (req, reply) => {

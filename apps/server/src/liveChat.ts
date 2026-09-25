@@ -50,23 +50,29 @@ function mapRow(r: any): ChatMessageDTO {
 }
 
 export const LiveChat = {
-  /** Validate + persist a message. Returns the stored DTO, or an error code. */
-  async send(streamId: string, user: User, raw: string): Promise<{ ok: true; message: ChatMessageDTO } | { ok: false; error: "empty" | "too-long" | "rate-limited" }> {
+  /**
+   * Validate + build a message synchronously (no DB). Returns the canonical DTO or an error so
+   * the route can BROADCAST immediately and persist asynchronously — the DB write must never sit
+   * in the realtime delivery path.
+   */
+  build(streamId: string, user: User, raw: string, clientId?: string): { ok: true; message: ChatMessageDTO & { clientId?: string } } | { ok: false; error: "empty" | "too-long" | "rate-limited" } {
     const body = raw.replace(/\s+/g, " ").trim();
     if (!body) return { ok: false, error: "empty" };
     if (body.length > CHAT_MAX_LEN) return { ok: false, error: "too-long" };
     const now = Date.now();
     if (rateLimited(streamId, user.id, now)) return { ok: false, error: "rate-limited" };
-
-    const id = newId("msg");
-    await db.execute(
-      "INSERT INTO stream_messages (id, streamId, userId, body, createdAt) VALUES ($1,$2,$3,$4,$5)",
-      [id, streamId, user.id, body, now]
-    );
     return {
       ok: true,
-      message: { id, streamId, body, createdAt: now, author: { id: user.id, displayName: user.displayName, handle: user.handle, avatarUrl: user.avatarUrl } },
+      message: { id: newId("msg"), streamId, body, createdAt: now, clientId, author: { id: user.id, displayName: user.displayName, handle: user.handle, avatarUrl: user.avatarUrl } },
     };
+  },
+
+  /** Persist a built message. Fire-and-forget from the route (never blocks the broadcast). */
+  async persist(message: ChatMessageDTO): Promise<void> {
+    await db.execute(
+      "INSERT INTO stream_messages (id, streamId, userId, body, createdAt) VALUES ($1,$2,$3,$4,$5)",
+      [message.id, message.streamId, message.author.id, message.body, message.createdAt]
+    );
   },
 
   /** Recent messages, oldest→newest, excluding deleted. `before` paginates older history. */
