@@ -165,6 +165,17 @@ CREATE TABLE IF NOT EXISTS stream_speakers (
 );
 CREATE INDEX IF NOT EXISTS idx_stream_speakers_status ON stream_speakers(streamId, status);
 
+CREATE TABLE IF NOT EXISTS stream_messages (
+  id TEXT PRIMARY KEY,
+  streamId TEXT NOT NULL REFERENCES streams(id) ON DELETE CASCADE,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  createdAt BIGINT NOT NULL,
+  deletedAt BIGINT,
+  deletedBy TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_stream_messages_recent ON stream_messages(streamId, createdAt);
+
 CREATE TABLE IF NOT EXISTS reactions (
   id TEXT PRIMARY KEY,
   eventId TEXT UNIQUE NOT NULL,

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, AppState, Modal, useWindowDimensions } from "react-native";
+import { View, Text, Pressable, AppState, Modal, Share, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -9,8 +9,11 @@ import { realtime } from "../lib/realtime";
 import { Avatar, Pill, Loading } from "../components/ui";
 import { color, type, radius, REACTION_ICON, eyebrow } from "../theme";
 import { LiveKitStage } from "../components/livekit-stage";
+import { LiveChat } from "../components/live-chat";
 import { useSession } from "../session";
 import { sendReaction } from "../lib/reaction-queue";
+
+const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL || "https://ennoia-app.vercel.app";
 
 const REACTIONS = [
   { type: "fire", label: "React fire" },
@@ -32,6 +35,9 @@ export function Live() {
   const [forming, setForming] = useState(false);
   const [celebration, setCelebration] = useState<{ rank: number; rewardUsd: string; momentId: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [ended, setEnded] = useState(false);
+  const [followed, setFollowed] = useState<boolean | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
   const { sendTransaction, user } = useSession();
   const { height } = useWindowDimensions();
 
@@ -52,6 +58,7 @@ export function Live() {
     const timeout = setTimeout(() => controller.abort(), 15_000);
     setStream(null);
     setJoinError(false);
+    setEnded(false);
     (async () => {
       // The stream response already includes a sync snapshot; clock refinement must not block joining.
       void realtime.syncClock().catch(() => {});
@@ -60,6 +67,7 @@ export function Live() {
       setStream(r.stream);
       sync.current = r.sync;
       setViewers(r.stream.viewerCount);
+      if (!r.stream.isLive) setEnded(true);
     })().catch(() => { if (alive) setJoinError(true); }).finally(() => clearTimeout(timeout));
     realtime.connect();
     realtime.subscribe(id);
@@ -104,8 +112,18 @@ export function Live() {
         if (["CONFIRMED", "CLIPPING", "SETTLING"].includes(ev.state)) setForming(true);
         if (["PUBLISHED", "SETTLED", "EXPIRED"].includes(ev.state)) setForming(false);
       } else if (ev.t === "curator") setCelebration({ rank: ev.rank, rewardUsd: ev.rewardUsd ?? "$0.00", momentId: ev.momentId });
+      else if (ev.t === "live_room") api.stream(id).then((r) => { setStream(r.stream); if (!r.stream.isLive) setEnded(true); }).catch(() => {});
     });
   }, [id]);
+
+  // Follow state for the viewer's Follow control.
+  useEffect(() => {
+    const creatorId = stream?.creator?.id;
+    if (!creatorId || creatorId === user?.id) { setFollowed(null); return; }
+    let alive = true;
+    api.userSocial(creatorId).then((s) => { if (alive) setFollowed(s.followedByMe); }).catch(() => {});
+    return () => { alive = false; };
+  }, [stream?.creator?.id, user?.id]);
 
   useEffect(() => {
     if (!detecting) return;
@@ -125,9 +143,34 @@ export function Live() {
     } catch {}
   };
 
+  const share = async () => {
+    try { await Share.share({ message: `${stream?.title ?? "Live on ENNOIA"} — ${WEB_URL}/live/${id}` }); } catch {}
+  };
+  const toggleFollow = async () => {
+    const creatorId = stream?.creator?.id;
+    if (!creatorId || followed === null) return;
+    const next = !followed;
+    setFollowed(next);
+    try { if (next) await api.follow(creatorId); else await api.unfollow(creatorId); }
+    catch { setFollowed(!next); setToast("Couldn't update follow. Try again in a moment."); }
+  };
+
   if (!stream) return joinError
     ? <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24, backgroundColor: color.night }}><Text style={{ color: color.textSecondary, ...type.body }}>The stream is taking too long to load.</Text><Pressable accessibilityRole="button" onPress={() => setJoinAttempt((attempt) => attempt + 1)} style={{ borderWidth: 1, borderColor: color.lime, padding: 12 }}><Text style={{ color: color.lime, ...eyebrow(11) }}>Retry joining</Text></Pressable></View>
     : <Loading label="Joining live…" />;
+
+  if (ended) return (
+    <View style={{ flex: 1, backgroundColor: color.night, alignItems: "center", justifyContent: "center", padding: 24, gap: 12 }}>
+      <Pill tone="live">ENDED</Pill>
+      <Text style={{ color: color.text, ...type.h2, textAlign: "center" }}>This stream has ended</Text>
+      <Text style={{ color: color.textSecondary, ...type.body, textAlign: "center" }}>{stream.creator?.displayName ?? "The host"} isn't live right now. Catch the Moments they made, or head back to the feed.</Text>
+      <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+        <Pressable onPress={() => nav.navigate("Tabs", { screen: "MomentsTab" })} style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 14, paddingVertical: 10 }}><Text style={{ color: color.text, ...eyebrow(11) }}>View Moments</Text></Pressable>
+        <Pressable onPress={() => nav.goBack()} style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 14, paddingVertical: 10 }}><Text style={{ color: color.text, ...eyebrow(11) }}>Back to feed</Text></Pressable>
+      </View>
+    </View>
+  );
+
   const isHost = stream.creator?.id === user?.id;
   const H = Math.min(height * (isHost ? 0.78 : 0.62), isHost ? 820 : 640);
 
@@ -187,7 +230,7 @@ export function Live() {
         </Pressable>
       ) : null}
 
-      {isHost ? <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 16 }}><Text style={{ color: color.textSecondary, ...eyebrow(11) }}>You are hosting · {viewers} watching</Text></View> : <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
+      {isHost ? <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 16, gap: 12 }}><Text style={{ color: color.textSecondary, ...eyebrow(11) }}>You are hosting · {viewers} watching</Text><View style={{ flexDirection: "row", gap: 12 }}><Pressable onPress={() => setChatOpen(true)} accessibilityLabel="Open live chat" style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}><Text style={{ ...eyebrow(11), color: color.textSecondary }}>💬 Chat</Text></Pressable><Pressable onPress={() => void share()} accessibilityLabel="Share stream" style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}><Text style={{ ...eyebrow(11), color: color.textSecondary }}>↗ Share</Text></Pressable></View></View> : <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
         {heatingUp ? <Text style={{ color: color.lime, ...eyebrow(11) }}>● Heating up</Text> : <View style={{ height: 16 }} />}
         <View style={{ flexDirection: "row", gap: 16 }}>
           {REACTIONS.map((r) => (
@@ -232,6 +275,13 @@ export function Live() {
             <Text style={{ ...eyebrow(11), color: color.textSecondary }}>✂ Clip it</Text>
           </Pressable>
         </View>
+        <View style={{ flexDirection: "row", gap: 12 }}>
+          <Pressable onPress={() => setChatOpen(true)} accessibilityLabel="Open live chat" style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}><Text style={{ ...eyebrow(11), color: color.textSecondary }}>💬 Chat</Text></Pressable>
+          <Pressable onPress={() => void share()} accessibilityLabel="Share stream" style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}><Text style={{ ...eyebrow(11), color: color.textSecondary }}>↗ Share</Text></Pressable>
+          {followed !== null ? (
+            <Pressable onPress={() => void toggleFollow()} accessibilityLabel={followed ? "Following" : "Follow creator"} style={{ borderWidth: 1, borderColor: followed ? color.border : color.brand, backgroundColor: followed ? color.surface2 : color.brand, paddingHorizontal: 12, paddingVertical: 8 }}><Text style={{ ...eyebrow(11), color: followed ? color.textSecondary : "#FFFFFF" }}>{followed ? "Following ✓" : "+ Follow"}</Text></Pressable>
+          ) : null}
+        </View>
         <Text style={{ color: color.textMuted, ...type.micro }}>Tap to react</Text>
       </View>}
       {toast ? (
@@ -239,6 +289,15 @@ export function Live() {
           <Text style={{ color: color.text, ...type.body }}>{toast}</Text>
         </View>
       ) : null}
+
+      <Modal visible={chatOpen} transparent animationType="slide" onRequestClose={() => setChatOpen(false)}>
+        <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.35)" }}>
+          <Pressable style={{ flex: 1 }} accessibilityLabel="Close chat" onPress={() => setChatOpen(false)} />
+          <SafeAreaView edges={["bottom"]} style={{ height: "62%", backgroundColor: color.surface1 }}>
+            <LiveChat streamId={id} isHost={isHost} onlineCount={viewers} onClose={() => setChatOpen(false)} />
+          </SafeAreaView>
+        </View>
+      </Modal>
 
       <Modal visible={!!celebration} transparent animationType="fade">
         {celebration ? (

@@ -23,6 +23,8 @@ export type ServerEvent =
   | { t: "settlement"; momentId: string; status: string; txHash: string | null }
   | { t: "viewers"; streamId: string; count: number }
   | { t: "live_room"; streamId: string }
+  | { t: "chat"; streamId: string; message: { id: string; body: string; createdAt: number; author: { id: string; displayName: string; handle: string; avatarUrl: string | null } } }
+  | { t: "chat_deleted"; streamId: string; messageId: string }
   | { t: "feed"; postId: string };
 
 interface Conn {
