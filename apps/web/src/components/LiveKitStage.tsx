@@ -151,7 +151,7 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
 
         {/* CENTER: video + title */}
         <div className="flex min-h-0 flex-col">
-          <div className="relative min-h-0 flex-1 bg-black">
+          <div data-theme="dark" className="relative min-h-0 flex-1 bg-black">
             <div className="absolute left-3 top-3 z-10 flex items-center gap-2"><LivePill count={live} /></div>
             {videoSurface}
           </div>

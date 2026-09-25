@@ -181,7 +181,7 @@ export function Live() {
   // ---- loading / error / ended ----
   if (!stream) {
     return (
-      <div data-theme="dark" className="min-h-[100dvh] grid place-items-center bg-night text-text">
+      <div className="min-h-[100dvh] grid place-items-center bg-night text-text">
         <div className="text-center">
           {joinError ? (
             <><p className="text-body text-text-secondary">The stream is taking too long to load.</p>
@@ -196,7 +196,7 @@ export function Live() {
 
   if (ended) {
     return (
-      <div data-theme="dark" className="min-h-[100dvh] grid place-items-center bg-night text-text">
+      <div className="min-h-[100dvh] grid place-items-center bg-night text-text">
         <div className="max-w-sm text-center">
           <LivePill />
           <h1 className="mt-4 text-h2">This stream has ended</h1>
@@ -215,7 +215,7 @@ export function Live() {
   const studioMode = isCreator && stream.mode === "livekit" && wide;
   if (studioMode) {
     return (
-      <div data-theme="dark" className="h-[100dvh] bg-night text-text">
+      <div className="h-[100dvh] bg-night text-text">
         <LiveKitStage streamId={stream.id} hostId={stream.creator?.id ?? ""} stream={stream} viewerCount={viewerCount} followerCount={followerCount} onEnd={() => void endLive()} />
         {detecting && <MomentDetectedOverlay onDone={() => { setDetecting(false); setForming(true); }} />}
         {toast && <RewardToast text={toast} />}
@@ -228,11 +228,11 @@ export function Live() {
     : <LivePlayer src={stream.videoUrl} getPositionSec={positionSec} muted={muted} onToggleMute={() => setMuted((m) => !m)} />;
 
   return (
-    <div data-theme="dark" className="min-h-[100dvh] bg-night text-text">
+    <div className="min-h-[100dvh] bg-night text-text">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col lg:h-[100dvh] lg:flex-row">
         {/* ---- MAIN column: video + engagement ---- */}
         <div className="flex min-w-0 flex-1 flex-col lg:min-h-0">
-          <div className="relative w-full shrink-0 bg-black lg:min-h-0 lg:flex-1" style={{ height: "clamp(220px, 42vh, 560px)" }}>
+          <div data-theme="dark" className="relative w-full shrink-0 bg-black lg:min-h-0 lg:flex-1" style={{ height: "clamp(220px, 42vh, 560px)" }}>
             <div className="absolute inset-0 lg:static lg:h-full">{videoNode}</div>
             <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/50 to-transparent" aria-hidden />
 
@@ -311,7 +311,7 @@ export function Live() {
 
       {/* ---- CHAT sheet (mobile) ---- */}
       {chatOpen && (
-        <div className="fixed inset-0 z-40 flex flex-col lg:hidden" role="dialog" aria-label="Live chat" data-theme="dark">
+        <div className="fixed inset-0 z-40 flex flex-col lg:hidden" role="dialog" aria-label="Live chat">
           <button className="flex-1 bg-black/40" aria-label="Close chat" onClick={() => setChatOpen(false)} />
           <div className="h-[62dvh]">
             <LiveChat streamId={id} isHost={isCreator} onlineCount={viewerCount} className="h-full" />
