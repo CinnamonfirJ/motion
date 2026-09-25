@@ -7,6 +7,7 @@ import { Avatar, LivePill } from "../components/ui";
 import { LivePlayer } from "../components/players";
 import { LiveKitStage } from "../components/LiveKitStage";
 import { LiveChat } from "../components/LiveChat";
+import { useMediaQuery } from "../lib/useMediaQuery";
 import {
   ReactionRail,
   LivePulse,
@@ -45,7 +46,9 @@ export function Live() {
   const [detecting, setDetecting] = useState(false);
   const [forming, setForming] = useState(false);
   const [followed, setFollowed] = useState<boolean | null>(null);
+  const [followerCount, setFollowerCount] = useState<number | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const wide = useMediaQuery("(min-width: 1024px)");
   const [celebration, setCelebration] = useState<{ rank: number; rewardUsd: string; momentId: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [wave, setWave] = useState<number[]>([]);
@@ -80,12 +83,16 @@ export function Live() {
     };
   }, [id, joinAttempt]);
 
-  // Follow state for the viewer's Follow button.
+  // Follow state (viewer) + follower count (host studio stats).
   useEffect(() => {
     const creatorId = stream?.creator?.id;
-    if (!creatorId || creatorId === user?.id) { setFollowed(null); return; }
+    if (!creatorId) { setFollowed(null); setFollowerCount(null); return; }
     let alive = true;
-    api.userSocial(creatorId).then((s) => { if (alive) setFollowed(s.followedByMe); }).catch(() => {});
+    api.userSocial(creatorId).then((s) => {
+      if (!alive) return;
+      setFollowerCount(s.followers);
+      setFollowed(creatorId === user?.id ? null : s.followedByMe);
+    }).catch(() => {});
     return () => { alive = false; };
   }, [stream?.creator?.id, user?.id]);
 
@@ -199,6 +206,19 @@ export function Live() {
             <button className={chip} onClick={() => nav("/")}>Back to feed</button>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // Desktop host of a LiveKit stream → the full studio (reference layout, ENNOIA sharp style).
+  // Mobile host + all viewers keep the stacked watch-first layout below.
+  const studioMode = isCreator && stream.mode === "livekit" && wide;
+  if (studioMode) {
+    return (
+      <div data-theme="dark" className="h-[100dvh] bg-night text-text">
+        <LiveKitStage streamId={stream.id} hostId={stream.creator?.id ?? ""} stream={stream} viewerCount={viewerCount} followerCount={followerCount} onEnd={() => void endLive()} />
+        {detecting && <MomentDetectedOverlay onDone={() => { setDetecting(false); setForming(true); }} />}
+        {toast && <RewardToast text={toast} />}
       </div>
     );
   }
