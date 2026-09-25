@@ -270,18 +270,20 @@ export async function registerRoutes(app: FastifyInstance) {
       isLive: true,
       createdAt: now,
     });
+    let recordingStarted = false;
     if (permanentMediaConfigured()) {
       try {
         const recording = await startStreamRecording(id);
         await Streams.setRecording(id, recording.egressId, recording.prefix, recording.startedAt);
+        recordingStarted = true;
       } catch (error) {
-        await Streams.end(id);
-        req.log.error({ error, streamId: id }, "failed to start permanent stream recording");
-        return reply.code(502).send({ error: "recording-start-failed" });
+        // Recording (LiveKit Egress → R2) is optional infra. If it can't start, go live
+        // anyway — the stream works; permanent Moment clips just won't record for this one.
+        req.log.warn({ error, streamId: id }, "permanent stream recording unavailable; going live without it");
       }
     }
     if (livekitConfigured()) await LiveRooms.hostPresence(id, false);
-    return { stream: await streamView(stream, 0) };
+    return { stream: await streamView(stream, 0), recording: recordingStarted };
   });
 
   // Mint a LiveKit room token. The creator is host; approved speakers receive scoped publish grants.
