@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
-  "installCommand": "pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm --filter @ennoia/core build && pnpm --filter @ennoia/web build",
+  "installCommand": "npx --yes pnpm@11.5.0 install --no-frozen-lockfile",
+  "buildCommand": "npx --yes pnpm@11.5.0 --filter @ennoia/core build && npx --yes pnpm@11.5.0 --filter @ennoia/web build",
   "outputDirectory": "apps/web/dist",
   "rewrites": [
     { "source": "/((?!assets/).*)", "destination": "/index.html" }
