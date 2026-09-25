@@ -234,6 +234,7 @@ export function Live() {
         <div className="flex min-w-0 flex-1 flex-col lg:min-h-0">
           <div className="relative w-full shrink-0 bg-black lg:min-h-0 lg:flex-1" style={{ height: "clamp(220px, 42vh, 560px)" }}>
             <div className="absolute inset-0 lg:static lg:h-full">{videoNode}</div>
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/50 to-transparent" aria-hidden />
 
             {/* top overlays — kept minimal so they don't compete with the stream */}
             <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3 lg:p-4" style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }}>
@@ -251,17 +252,25 @@ export function Live() {
             {detecting && <MomentDetectedOverlay onDone={() => { setDetecting(false); setForming(true); }} />}
           </div>
 
-          {/* engagement / meta rail */}
+          {/* below-video: creator meta + engagement (reference viewer structure, sharp style) */}
           <div className="flex flex-col gap-4 overflow-y-auto border-t border-border bg-surface1 p-4 lg:shrink-0 lg:p-5" style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h1 className="truncate text-h3 text-text">{stream.title}</h1>
-                <p className="mt-1 font-mono text-micro uppercase tracking-[0.1em] text-text-muted">{stream.creator?.displayName} · {viewerCount} watching</p>
-                {isCreator && stream.mode === "livekit" && stream.recording === false && (
-                  <p className="mt-1.5 inline-flex items-center gap-1.5 border border-warning/40 bg-warning/10 px-2 py-0.5 font-mono text-micro uppercase tracking-[0.1em] text-warning" role="status">
-                    <span aria-hidden>⦿</span> Not recording · clips won't save this stream
+            {/* meta row: creator + title on the left, Share/Follow on the right */}
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <Avatar name={stream.creator?.displayName ?? "?"} url={stream.creator?.avatarUrl} size={44} />
+                <div className="min-w-0">
+                  <h1 className="truncate text-h3 text-text">{stream.title}</h1>
+                  <p className="mt-1 flex items-center gap-2 font-mono text-micro uppercase tracking-[0.1em] text-text-muted">
+                    <span className="text-text-secondary">{stream.creator?.displayName}</span>
+                    <span className="h-1 w-1 rounded-full bg-text-muted" aria-hidden />
+                    {viewerCount} watching
                   </p>
-                )}
+                  {isCreator && stream.mode === "livekit" && stream.recording === false && (
+                    <p className="mt-1.5 inline-flex items-center gap-1.5 border border-warning/40 bg-warning/10 px-2 py-0.5 font-mono text-micro uppercase tracking-[0.1em] text-warning" role="status">
+                      <span aria-hidden>⦿</span> Not recording · clips won't save this stream
+                    </p>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <button className={chip} onClick={() => void share()}>↗ Share</button>
@@ -275,17 +284,21 @@ export function Live() {
               </div>
             </div>
 
-            {/* reactions — ENNOIA's reward-bearing engagement */}
-            <div className="flex flex-col items-center gap-3">
-              <ReactionWave data={wave} heatingUp={heatingUp} />
-              <LivePulse heatingUp={heatingUp} />
-              <ReactionRail onReact={react} />
+            {/* engagement strip: reactions (ENNOIA's core signal) + Tip / Clip */}
+            <div className="flex flex-wrap items-center justify-between gap-4 border border-border bg-surface2 p-3">
+              <div className="flex items-center gap-4">
+                <ReactionRail onReact={react} />
+                <div className="hidden sm:block"><LivePulse heatingUp={heatingUp} /></div>
+              </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => void tip()} className={chip}>♥ Tip</button>
-                <button onClick={() => void clip()} className={chip}>✂ Clip it</button>
+                <button onClick={() => void clip()} className={chip}>✂ Clip</button>
                 <button onClick={() => setChatOpen(true)} className={`${chip} lg:hidden`} aria-label="Open live chat">💬 Chat</button>
               </div>
-              <p className="font-mono text-micro text-text-muted">Tap to react · keys 1 · 2 · 3</p>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <ReactionWave data={wave} heatingUp={heatingUp} />
+              <p className="font-mono text-micro text-text-muted">Tap or press 1 · 2 · 3</p>
             </div>
           </div>
         </div>
