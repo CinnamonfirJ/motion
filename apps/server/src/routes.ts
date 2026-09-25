@@ -8,6 +8,7 @@ import { verifyPrivyToken } from "./privy.js";
 import { processAccountDeletionJob } from "./accountDeletion.js";
 import { roomTokenFor } from "./livekit.js";
 import { LiveRooms } from "./liveRooms.js";
+import { LiveChat, CHAT_MAX_LEN } from "./liveChat.js";
 import { topCurators, trendingMoments, rewardHistory } from "./envio.js";
 import { createHmac, randomBytes } from "node:crypto";
 import { ingestReaction, config, demoFastForwardSettlement } from "./momentEngine.js";
@@ -407,6 +408,47 @@ export async function registerRoutes(app: FastifyInstance) {
     await stopStreamRecording(recording?.egressId ?? null);
     await Streams.end(id);
     return { ok: true, endedAt: Date.now() };
+  });
+
+  // ---------- live chat (text conversation alongside reactions) ----------
+  app.get("/streams/:id/chat", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!await Streams.byId(id)) return reply.code(404).send({ error: "not found" });
+    const q = (req.query ?? {}) as { before?: string; limit?: string };
+    const before = q.before ? Number(q.before) : undefined;
+    const limit = q.limit ? Number(q.limit) : 50;
+    return { messages: await LiveChat.recent(id, limit, before && Number.isFinite(before) ? before : undefined) };
+  });
+
+  app.post("/streams/:id/chat", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const { id } = req.params as { id: string };
+    const stream = await Streams.byId(id);
+    if (!stream) return reply.code(404).send({ error: "not found" });
+    if (!stream.isLive) return reply.code(409).send({ error: "stream-ended" });
+    const body = (req.body ?? {}) as { body?: string };
+    const result = await LiveChat.send(id, user, String(body.body ?? ""));
+    if (!result.ok) {
+      return reply.code(result.error === "rate-limited" ? 429 : 400).send({ error: result.error, maxLen: CHAT_MAX_LEN });
+    }
+    hub.broadcastStream(id, { t: "chat", streamId: id, message: { id: result.message.id, body: result.message.body, createdAt: result.message.createdAt, author: result.message.author } });
+    return { ok: true, message: result.message };
+  });
+
+  app.delete("/streams/:id/chat/:messageId", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const { id, messageId } = req.params as { id: string; messageId: string };
+    const stream = await Streams.byId(id);
+    if (!stream) return reply.code(404).send({ error: "not found" });
+    const target = await LiveChat.authorOf(messageId);
+    if (!target || target.streamId !== id) return reply.code(404).send({ error: "message-not-found" });
+    // Host (moderation) or the message's own author may delete.
+    if (stream.creatorId !== user.id && target.userId !== user.id) return reply.code(403).send({ error: "host-or-author-only" });
+    const removed = await LiveChat.remove(messageId, user.id);
+    if (removed) hub.broadcastStream(id, { t: "chat_deleted", streamId: id, messageId });
+    return { ok: removed };
   });
 
   // ---------- reactions ----------

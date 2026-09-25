@@ -124,6 +124,13 @@ export interface FeedItemDTO {
   moment?: MomentDTO;
 }
 export interface CommunityDTO { id: string; slug: string; name: string; description: string; memberCount: number }
+export interface ChatMessageDTO {
+  id: string;
+  streamId: string;
+  body: string;
+  createdAt: number;
+  author: { id: string; displayName: string; handle: string; avatarUrl: string | null };
+}
 
 export interface UnsignedTransactionDTO {
   to: `0x${string}`;
@@ -156,6 +163,9 @@ export const api = {
   setSpeakerPermissions: (id: string, userId: string, permissions: { canCamera?: boolean; canScreenShare?: boolean }) =>
     req<{ ok: boolean }>(speakerPath(id, userId), { method: "PATCH", body: JSON.stringify(permissions) }),
   removeSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(speakerPath(id, userId), { method: "DELETE" }),
+  chatHistory: (id: string, before?: number) => req<{ messages: ChatMessageDTO[] }>(`/streams/${id}/chat?${new URLSearchParams({ ...(before ? { before: String(before) } : {}) })}`),
+  sendChat: (id: string, body: string) => req<{ ok: boolean; message: ChatMessageDTO }>(`/streams/${id}/chat`, { method: "POST", body: JSON.stringify({ body }) }),
+  deleteChat: (id: string, messageId: string) => req<{ ok: boolean }>(`/streams/${id}/chat/${messageId}`, { method: "DELETE" }),
   feed: (mode: "for-you" | "following", before?: number, communityId?: string) =>
     req<{ items: FeedItemDTO[]; nextBefore: number | null }>(`/feed?${new URLSearchParams({ mode, ...(before ? { before: String(before) } : {}), ...(communityId ? { communityId } : {}) })}`),
   post: (id: string) => req<{ post: PostDTO }>(`/posts/${id}`),

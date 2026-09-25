@@ -7,7 +7,7 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#FEFEFE",
+    "backgroundColor": "#000000",
     "icon": "./assets/icon.png",
     "assetBundlePatterns": [
       "**/*"
@@ -44,10 +44,16 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash.png",
-          "backgroundColor": "#FEFEFE",
-          "imageWidth": 260,
-          "resizeMode": "contain"
+          "image": "./assets/ennoia-mark.png",
+          "backgroundColor": "#000000",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "dark": {
+            "image": "./assets/ennoia-mark.png",
+            "backgroundColor": "#000000",
+            "imageWidth": 200,
+            "resizeMode": "contain"
+          }
         }
       ],
       "expo-secure-store",

@@ -1,23 +1,22 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { View, Text, TextInput, KeyboardAvoidingView, Platform, ScrollView, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useSession } from "../session";
 import { Button, TagChip } from "../components/ui";
 import { color, type, monoText, MONO } from "../theme";
-import { isPasskeySupported } from "../lib/passkey";
 
 export function SignIn() {
-  const { login, signInPasskey, createPasskey } = useSession();
+  const { login, signInPasskey, createPasskey, authMode } = useSession();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [showEmail, setShowEmail] = useState(false);
-  const [passkeys, setPasskeys] = useState(false);
   const [busy, setBusy] = useState<null | "signin" | "create" | "email">(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    isPasskeySupported().then(setPasskeys);
-  }, []);
+  // Privy is the auth source of truth when configured (EXPO_PUBLIC_PRIVY_APP_ID set): the app
+  // is a real dev/release build here, so native passkeys work. Only when Privy is NOT configured
+  // do we fall back to the demo (guest / email) path — never gate on a client passkey stub.
+  const privy = authMode === "privy";
 
   const run = async (kind: "signin" | "create" | "email", fn: () => Promise<void>) => {
     setBusy(kind);
@@ -26,9 +25,9 @@ export function SignIn() {
       await fn();
     } catch (e: any) {
       const msg = String(e?.message ?? e);
-      if (/no-passkey-account/.test(msg)) setError("No passkey on this device yet — create one below.");
-      else if (/cancel/i.test(msg)) setError(null);
-      else if (/network|fetch|failed|timeout|abort/i.test(msg)) setError("ENNOIA isn't answering. Check your connection and try again in a moment.");
+      if (/no-passkey-account|no.?account/i.test(msg)) setError("No passkey on this device yet — create one below.");
+      else if (/cancel|dismiss|abort/i.test(msg)) setError(null);
+      else if (/network|fetch|failed|timeout/i.test(msg)) setError("ENNOIA isn't answering. Check your connection and try again in a moment.");
       else setError("That didn't land — give it a moment and try again.");
     } finally {
       setBusy(null);
@@ -55,9 +54,10 @@ export function SignIn() {
           </View>
 
           <View style={{ gap: 12 }}>
-            {passkeys ? (
+            {privy ? (
               <>
                 <Button title={busy === "signin" ? "Waiting for passkey…" : "Sign in with passkey"} onPress={() => run("signin", signInPasskey)} disabled={busy !== null} />
+                <Text style={{ color: color.textMuted, ...monoText(11), textTransform: "uppercase", letterSpacing: 1.2, textAlign: "center" }}>New here? Create one</Text>
                 <TextInput
                   placeholder="Display name (for a new account)"
                   placeholderTextColor={color.textMuted}
@@ -71,28 +71,27 @@ export function SignIn() {
             ) : (
               <>
                 <Button title={busy === "email" ? "One moment…" : "Continue as guest"} onPress={() => run("email", () => login(`demo${Math.floor(Math.random() * 100000)}@ennoia.app`))} disabled={busy !== null} />
-                <Text style={{ color: color.textMuted, ...type.micro, textAlign: "center" }}>Demo account · passkey sign-in needs the installed app</Text>
+                <Text style={{ color: color.textMuted, ...type.micro, textAlign: "center" }}>Demo account · passkey sign-in needs a Privy-configured build</Text>
+                <Text onPress={() => setShowEmail((v) => !v)} style={{ ...monoText(11), color: color.textMuted, textTransform: "uppercase", letterSpacing: 1.2 }}>
+                  {showEmail ? "Hide email" : "Use email instead"}
+                </Text>
+                {showEmail ? (
+                  <View style={{ gap: 10 }}>
+                    <TextInput
+                      placeholder="you@email.com"
+                      placeholderTextColor={color.textMuted}
+                      value={email}
+                      onChangeText={setEmail}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      accessibilityLabel="Email address"
+                      style={{ backgroundColor: color.surface2, borderColor: color.border, borderWidth: 1, color: color.text, padding: 14, fontSize: 15, fontFamily: MONO }}
+                    />
+                    <Button title={busy === "email" ? "Signing in…" : "Continue with email"} variant="secondary" onPress={() => run("email", () => login(email.trim()))} disabled={busy !== null || !email.trim()} />
+                  </View>
+                ) : null}
               </>
             )}
-
-            <Text onPress={() => setShowEmail((v) => !v)} style={{ ...monoText(11), color: color.textMuted, textTransform: "uppercase", letterSpacing: 1.2 }}>
-              {showEmail ? "Hide email" : "Use email instead"}
-            </Text>
-            {showEmail ? (
-              <View style={{ gap: 10 }}>
-                <TextInput
-                  placeholder="you@email.com"
-                  placeholderTextColor={color.textMuted}
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  accessibilityLabel="Email address"
-                  style={{ backgroundColor: color.surface2, borderColor: color.border, borderWidth: 1, color: color.text, padding: 14, fontSize: 15, fontFamily: MONO }}
-                />
-                <Button title={busy === "email" ? "Signing in…" : "Continue with email"} variant="secondary" onPress={() => run("email", () => login(email.trim()))} disabled={busy !== null || !email.trim()} />
-              </View>
-            ) : null}
 
             {error ? <Text style={{ color: color.error, ...type.bodysm, textAlign: "center" }}>{error}</Text> : null}
             <Text style={{ color: color.textMuted, ...type.micro, textAlign: "center" }}>Your passkey creates an account on Monad. No seed phrase.</Text>

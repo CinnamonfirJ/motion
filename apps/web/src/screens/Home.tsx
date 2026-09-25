@@ -10,11 +10,40 @@ import { PostComposer } from "../components/PostComposer";
 
 type Tab = "for-you" | "following" | "communities";
 
+/**
+ * Live feed card — reads as an ENNOIA post card that happens to be LIVE (reference structure,
+ * ENNOIA language): creator header · live preview with LIVE + viewer count · title · join
+ * affordance. No broadcaster controls; tapping anywhere joins the stream.
+ */
 function StreamCard({ stream }: { stream: StreamDTO }) {
-  return <Link to={`/live/${stream.id}`} className="block border border-border bg-surface1 hover:border-borderStrong">
-    <div className="relative aspect-video bg-black">{stream.thumbnailUrl && <img src={stream.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />}<div className="absolute left-3 top-3"><LivePill count={stream.viewerCount} /></div></div>
-    <div className="flex items-center gap-3 p-3"><Avatar name={stream.creator?.displayName ?? "Host"} url={stream.creator?.avatarUrl} size={36} /><div><p className="font-semibold text-text">{stream.title}</p><p className="text-bodysm text-text-secondary">{stream.creator?.displayName}</p></div></div>
-  </Link>;
+  const host = stream.creator?.displayName ?? "Host";
+  return (
+    <Link to={`/live/${stream.id}`} aria-label={`Join ${host}'s live stream: ${stream.title}`} className="group block border border-border bg-surface1 transition-colors hover:border-borderStrong">
+      <div className="flex items-center gap-3 px-3 pt-3">
+        <Avatar name={host} url={stream.creator?.avatarUrl} size={36} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-semibold text-text">{host}</p>
+          <p className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-[0.12em] text-error">
+            <span className="h-1.5 w-1.5 bg-error animate-[pulseRing_1.4s_ease-out_infinite]" aria-hidden /> Live now
+          </p>
+        </div>
+        <span className="hidden font-mono text-micro uppercase tracking-[0.1em] text-leaf sm:inline">Tap to join →</span>
+      </div>
+      <div className="relative mt-3 aspect-video bg-black">
+        {stream.thumbnailUrl
+          ? <img src={stream.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+          : <div className="grid h-full place-items-center bg-surface2"><span className="font-mono text-micro uppercase tracking-[0.14em] text-text-muted">● Live video</span></div>}
+        <div className="absolute left-3 top-3"><LivePill /></div>
+        <div className="absolute right-3 top-3 flex items-center gap-1.5 border border-white/15 bg-black/55 px-2 py-1 font-mono text-micro uppercase tracking-[0.08em] text-white backdrop-blur">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
+          {stream.viewerCount}
+        </div>
+      </div>
+      <div className="p-3">
+        <p className="font-semibold text-text group-hover:text-leaf">{stream.title}</p>
+      </div>
+    </Link>
+  );
 }
 
 export function Home() {

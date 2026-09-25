@@ -1,12 +1,42 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, ScrollView, Pressable, Image, RefreshControl, FlatList, TextInput } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { api, type FeedItemDTO, type CommunityDTO, type MomentDTO } from "../lib/api";
+import { api, type FeedItemDTO, type CommunityDTO, type MomentDTO, type StreamDTO } from "../lib/api";
 import { Avatar, Pill, EmptyState, ReactionGraph, ReactionMix, SectionIndex } from "../components/ui";
 import { color, type, radius, eyebrow } from "../theme";
 import { PostCard } from "../components/post-card";
 
 type Tab = "for-you" | "following" | "communities";
+
+/** Live feed card — an ENNOIA post card that happens to be LIVE (matches the web StreamCard). */
+function StreamFeedCard({ stream, onPress }: { stream: StreamDTO; onPress: () => void }) {
+  const host = stream.creator?.displayName ?? "Host";
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Join ${host}'s live stream: ${stream.title}`} style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface1 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, paddingTop: 12 }}>
+        <Avatar name={host} url={stream.creator?.avatarUrl} size={34} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text numberOfLines={1} style={{ color: color.text, ...type.body, fontWeight: "700" }}>{host}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <View style={{ width: 6, height: 6, backgroundColor: color.error }} />
+            <Text style={{ color: color.error, ...eyebrow(10) }}>Live now</Text>
+          </View>
+        </View>
+        <Text style={{ color: color.lime, ...eyebrow(10) }}>Join →</Text>
+      </View>
+      <View style={{ aspectRatio: 16 / 9, backgroundColor: color.night, marginTop: 10 }}>
+        {stream.thumbnailUrl ? <Image source={{ uri: stream.thumbnailUrl }} style={{ width: "100%", height: "100%" }} /> : <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Text style={{ color: color.textMuted, ...eyebrow(10) }}>● Live video</Text></View>}
+        <View style={{ position: "absolute", left: 10, top: 10 }}><Pill tone="live">LIVE</Pill></View>
+        <View style={{ position: "absolute", right: 10, top: 10, flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(0,0,0,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.15)", paddingHorizontal: 8, paddingVertical: 3 }}>
+          <Text style={{ color: "#fff", ...eyebrow(10) }}>👁 {stream.viewerCount}</Text>
+        </View>
+      </View>
+      <View style={{ padding: 12 }}>
+        <Text style={{ color: color.text, ...type.body, fontWeight: "700" }}>{stream.title}</Text>
+      </View>
+    </Pressable>
+  );
+}
 
 export function Home() {
   const nav = useNavigation<any>();
@@ -96,7 +126,7 @@ export function Home() {
         {tab !== "communities" || (communityId && member) ? <Pressable accessibilityRole="button" onPress={() => nav.navigate("CreatePost", { communityId: selectedCommunity })} style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface1, padding: 14, flexDirection: "row", alignItems: "center", gap: 10 }}><View style={{ width: 8, height: 8, backgroundColor: color.lime }} /><Text style={{ color: color.textSecondary, ...type.body }}>What's happening?</Text><Text style={{ marginLeft: "auto", color: color.lime, ...eyebrow(10) }}>Post</Text></Pressable> : null}
         {error ? <Pressable onPress={() => void load()} style={{ borderWidth: 1, borderColor: color.error, padding: 10 }}><Text selectable style={{ color: color.error, ...type.bodysm }}>{error} Tap to retry.</Text></Pressable> : null}
       </View>}
-      renderItem={({ item }) => item.type === "post" && item.post ? <PostCard post={item.post} onChanged={() => void load()} onOpen={() => nav.navigate("PostDetail", { id: item.post!.id })} onAuthor={(id) => nav.navigate("PublicProfile", { id })} onQuote={(id) => nav.navigate("CreatePost", { quotePostId: id })} /> : item.type === "stream" && item.stream ? <Pressable onPress={() => nav.navigate("Live", { id: item.stream!.id })} style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface1 }}><View style={{ aspectRatio: 16 / 9, backgroundColor: color.night }}>{item.stream.thumbnailUrl ? <Image source={{ uri: item.stream.thumbnailUrl }} style={{ width: "100%", height: "100%" }} /> : null}<View style={{ position: "absolute", left: 10, top: 10 }}><Pill tone="live">LIVE · {item.stream.viewerCount}</Pill></View></View><View style={{ padding: 12, flexDirection: "row", alignItems: "center", gap: 10 }}><Avatar name={item.stream.creator?.displayName ?? "Host"} url={item.stream.creator?.avatarUrl} size={32} /><View style={{ flex: 1 }}><Text style={{ color: color.text, ...type.body, fontWeight: "700" }}>{item.stream.title}</Text><Text style={{ color: color.textSecondary, ...type.bodysm }}>{item.stream.creator?.displayName}</Text></View></View></Pressable> : item.type === "moment" && item.moment ? <MomentCard moment={item.moment} onPress={() => nav.navigate("MomentDetail", { id: item.moment!.id })} /> : null}
+      renderItem={({ item }) => item.type === "post" && item.post ? <PostCard post={item.post} onChanged={() => void load()} onOpen={() => nav.navigate("PostDetail", { id: item.post!.id })} onAuthor={(id) => nav.navigate("PublicProfile", { id })} onQuote={(id) => nav.navigate("CreatePost", { quotePostId: id })} /> : item.type === "stream" && item.stream ? <StreamFeedCard stream={item.stream} onPress={() => nav.navigate("Live", { id: item.stream!.id })} /> : item.type === "moment" && item.moment ? <MomentCard moment={item.moment} onPress={() => nav.navigate("MomentDetail", { id: item.moment!.id })} /> : null}
       ListEmptyComponent={items === null ? <View style={{ padding: 32, alignItems: "center" }}><Text style={{ color: color.textSecondary, ...type.body }}>Loading feed…</Text></View> : <EmptyState title={tab === "following" ? "Following is quiet." : tab === "communities" ? "No posts here yet." : "Your feed is just getting started."} body={tab === "following" ? "Follow people to see their posts, live streams, and Moments." : "Start a conversation or come back when something goes live."} />}
       ListFooterComponent={nextBefore ? <Pressable accessibilityRole="button" disabled={loadingMore} onPress={() => void loadMore()} style={{ alignItems: "center", borderWidth: 1, borderColor: color.border, backgroundColor: color.surface1, padding: 12 }}><Text style={{ color: color.textSecondary, ...eyebrow(10) }}>{loadingMore ? "Loading…" : "Load more"}</Text></Pressable> : null}
     />

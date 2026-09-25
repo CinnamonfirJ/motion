@@ -144,6 +144,14 @@ export interface LiveRoomDTO {
   speakers: { userId: string; status: "requested" | "invited" | "approved"; canCamera: boolean; canScreenShare: boolean }[];
 }
 
+export interface ChatMessageDTO {
+  id: string;
+  streamId: string;
+  body: string;
+  createdAt: number;
+  author: CreatorMini;
+}
+
 export interface PostDTO {
   id: string;
   author: CreatorMini;
@@ -255,6 +263,10 @@ export const api = {
   setSpeakerPermissions: (id: string, userId: string, permissions: { canCamera?: boolean; canScreenShare?: boolean }) =>
     req<{ ok: boolean }>(speakerPath(id, userId), { method: "PATCH", body: JSON.stringify(permissions) }),
   removeSpeaker: (id: string, userId: string) => req<{ ok: boolean }>(speakerPath(id, userId), { method: "DELETE" }),
+  chatHistory: (id: string, before?: number, signal?: AbortSignal) =>
+    req<{ messages: ChatMessageDTO[] }>(`/streams/${id}/chat?${new URLSearchParams({ ...(before ? { before: String(before) } : {}) })}`, { signal }),
+  sendChat: (id: string, body: string) => req<{ ok: boolean; message: ChatMessageDTO }>(`/streams/${id}/chat`, { method: "POST", body: JSON.stringify({ body }) }),
+  deleteChat: (id: string, messageId: string) => req<{ ok: boolean }>(`/streams/${id}/chat/${messageId}`, { method: "DELETE" }),
   feed: (mode: "for-you" | "following", before?: number, communityId?: string) =>
     req<{ items: FeedItemDTO[]; nextBefore: number | null }>(`/feed?${new URLSearchParams({ mode, ...(before ? { before: String(before) } : {}), ...(communityId ? { communityId } : {}) })}`),
   post: (id: string) => req<{ post: PostDTO }>(`/posts/${id}`),
