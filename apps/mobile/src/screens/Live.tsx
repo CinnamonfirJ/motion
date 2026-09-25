@@ -12,8 +12,20 @@ import { LiveKitStage } from "../components/livekit-stage";
 import { LiveChat } from "../components/live-chat";
 import { useSession } from "../session";
 import { sendReaction } from "../lib/reaction-queue";
+import { ArrowLeft, Radio, MessageSquare, Share2, Heart, Scissors, UserPlus, Check, type LucideIcon } from "lucide-react-native";
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL || "https://ennoia-app.vercel.app";
+
+/** Sharp icon+label action button — matches the studio/web live buttons. */
+function StageBtn({ label, Icon, onPress, accessibilityLabel, filled }: { label: string; Icon: LucideIcon; onPress: () => void; accessibilityLabel?: string; filled?: boolean }) {
+  const fg = filled ? "#FFFFFF" : color.textSecondary;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} onPress={onPress} style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: filled ? color.brand : color.border, backgroundColor: filled ? color.brand : color.surface2, paddingHorizontal: 12, paddingVertical: 8, opacity: pressed ? 0.85 : 1 })}>
+      <Icon size={14} color={fg} strokeWidth={1.8} />
+      <Text style={{ ...eyebrow(11), color: fg }}>{label}</Text>
+    </Pressable>
+  );
+}
 
 const REACTIONS = [
   { type: "fire", label: "React fire" },
@@ -184,7 +196,7 @@ export function Live() {
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
               <Pressable onPress={() => nav.goBack()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" }}>
-                <Text style={{ color: color.text, fontSize: 18 }}>←</Text>
+                <ArrowLeft size={18} color={color.text} strokeWidth={2} />
               </Pressable>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(0,0,0,0.45)", borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4 }}>
                 <Avatar name={stream.creator?.displayName ?? "?"} url={stream.creator?.avatarUrl} size={24} />
@@ -224,13 +236,14 @@ export function Live() {
               setToast("The stream could not be ended yet. Try again.");
             }
           }}
-          style={{ position: "absolute", top: 116, right: 16, backgroundColor: color.error, paddingHorizontal: 12, paddingVertical: 8 }}
+          style={{ position: "absolute", top: 116, right: 16, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: color.error, paddingHorizontal: 12, paddingVertical: 8 }}
         >
+          <Radio size={14} color="#FFFFFF" strokeWidth={2} />
           <Text style={{ color: "#FFFFFF", ...eyebrow(11) }}>End live</Text>
         </Pressable>
       ) : null}
 
-      {isHost ? <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 16, gap: 12 }}><Text style={{ color: color.textSecondary, ...eyebrow(11) }}>You are hosting · {viewers} watching</Text>{stream.mode === "livekit" && stream.recording === false ? <View accessibilityRole="text" style={{ borderWidth: 1, borderColor: color.warning, backgroundColor: color.surface2, paddingHorizontal: 10, paddingVertical: 6 }}><Text style={{ color: color.warning, ...eyebrow(10) }}>⦿ Not recording · clips won't save</Text></View> : null}<View style={{ flexDirection: "row", gap: 12 }}><Pressable onPress={() => setChatOpen(true)} accessibilityLabel="Open live chat" style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}><Text style={{ ...eyebrow(11), color: color.textSecondary }}>💬 Chat</Text></Pressable><Pressable onPress={() => void share()} accessibilityLabel="Share stream" style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}><Text style={{ ...eyebrow(11), color: color.textSecondary }}>↗ Share</Text></Pressable></View></View> : <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
+      {isHost ? <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 16, gap: 12 }}><Text style={{ color: color.textSecondary, ...eyebrow(11) }}>You are hosting · {viewers} watching</Text>{stream.mode === "livekit" && stream.recording === false ? <View accessibilityRole="text" style={{ borderWidth: 1, borderColor: color.warning, backgroundColor: color.surface2, paddingHorizontal: 10, paddingVertical: 6 }}><Text style={{ color: color.warning, ...eyebrow(10) }}>⦿ Not recording · clips won't save</Text></View> : null}<View style={{ flexDirection: "row", gap: 12 }}><StageBtn label="Chat" Icon={MessageSquare} onPress={() => setChatOpen(true)} accessibilityLabel="Open live chat" /><StageBtn label="Share" Icon={Share2} onPress={() => void share()} accessibilityLabel="Share stream" /></View></View> : <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
         {heatingUp ? <Text style={{ color: color.lime, ...eyebrow(11) }}>● Heating up</Text> : <View style={{ height: 16 }} />}
         <View style={{ flexDirection: "row", gap: 16 }}>
           {REACTIONS.map((r) => (
@@ -245,41 +258,20 @@ export function Live() {
           ))}
         </View>
         <View style={{ flexDirection: "row", gap: 12 }}>
-          <Pressable
-            onPress={async () => {
-              try {
-                const r = await api.tip(id);
-                await sendTransaction(r.transaction);
-                setToast(`Tip sent · ${r.amountUsd}`);
-              } catch {
-                setToast("Your tip needs a moment — still going through.");
-              }
-            }}
-            style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}
-          >
-            <Text style={{ ...eyebrow(11), color: color.textSecondary }}>♥ Tip</Text>
-          </Pressable>
-          <Pressable
-            onPress={async () => {
-              try {
-                const s = sync.current;
-                const at = s ? streamTimeMs(s.startedAt, realtime.serverNow()) : 0;
-                await api.clip(id, at);
-                setToast("Clip saved to your finds");
-              } catch {
-                setToast("Your clip's coming together — one moment.");
-              }
-            }}
-            style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}
-          >
-            <Text style={{ ...eyebrow(11), color: color.textSecondary }}>✂ Clip it</Text>
-          </Pressable>
+          <StageBtn label="Tip" Icon={Heart} onPress={async () => {
+            try { const r = await api.tip(id); await sendTransaction(r.transaction); setToast(`Tip sent · ${r.amountUsd}`); }
+            catch { setToast("Your tip needs a moment — still going through."); }
+          }} />
+          <StageBtn label="Clip it" Icon={Scissors} onPress={async () => {
+            try { const s = sync.current; const at = s ? streamTimeMs(s.startedAt, realtime.serverNow()) : 0; await api.clip(id, at); setToast("Clip saved to your finds"); }
+            catch { setToast("Your clip's coming together — one moment."); }
+          }} />
         </View>
         <View style={{ flexDirection: "row", gap: 12 }}>
-          <Pressable onPress={() => setChatOpen(true)} accessibilityLabel="Open live chat" style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}><Text style={{ ...eyebrow(11), color: color.textSecondary }}>💬 Chat</Text></Pressable>
-          <Pressable onPress={() => void share()} accessibilityLabel="Share stream" style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, paddingHorizontal: 12, paddingVertical: 8 }}><Text style={{ ...eyebrow(11), color: color.textSecondary }}>↗ Share</Text></Pressable>
+          <StageBtn label="Chat" Icon={MessageSquare} onPress={() => setChatOpen(true)} accessibilityLabel="Open live chat" />
+          <StageBtn label="Share" Icon={Share2} onPress={() => void share()} accessibilityLabel="Share stream" />
           {followed !== null ? (
-            <Pressable onPress={() => void toggleFollow()} accessibilityLabel={followed ? "Following" : "Follow creator"} style={{ borderWidth: 1, borderColor: followed ? color.border : color.brand, backgroundColor: followed ? color.surface2 : color.brand, paddingHorizontal: 12, paddingVertical: 8 }}><Text style={{ ...eyebrow(11), color: followed ? color.textSecondary : "#FFFFFF" }}>{followed ? "Following ✓" : "+ Follow"}</Text></Pressable>
+            <StageBtn label={followed ? "Following" : "Follow"} Icon={followed ? Check : UserPlus} filled={!followed} onPress={() => void toggleFollow()} accessibilityLabel={followed ? "Following" : "Follow creator"} />
           ) : null}
         </View>
         <Text style={{ color: color.textMuted, ...type.micro }}>Tap to react</Text>
