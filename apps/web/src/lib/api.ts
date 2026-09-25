@@ -163,6 +163,19 @@ export interface BanDTO {
   avatarUrl: string | null;
 }
 
+export interface StreamAnalyticsDTO {
+  currentViewers: number;
+  peakViewers: number;
+  uniqueViewers: number;
+  totalWatchTimeMs: number;
+  streamDurationMs: number;
+  reactionCount: number;
+  momentCount: number;
+  followers: number;
+  newFollowers: number;
+  latestFollower: { displayName: string; handle: string; avatarUrl: string | null; at: number } | null;
+}
+
 export interface PostDTO {
   id: string;
   author: CreatorMini;
@@ -282,6 +295,7 @@ export const api = {
   banUser: (id: string, userId: string, kind: "ban" | "timeout" = "ban", durationMs?: number) =>
     req<{ ok: boolean }>(`/streams/${id}/bans`, { method: "POST", body: JSON.stringify({ userId, kind, durationMs }) }),
   unban: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/bans/${userId}`, { method: "DELETE" }),
+  analytics: (id: string) => req<StreamAnalyticsDTO>(`/streams/${id}/analytics`),
   feed: (mode: "for-you" | "following", before?: number, communityId?: string) =>
     req<{ items: FeedItemDTO[]; nextBefore: number | null }>(`/feed?${new URLSearchParams({ mode, ...(before ? { before: String(before) } : {}), ...(communityId ? { communityId } : {}) })}`),
   post: (id: string) => req<{ post: PostDTO }>(`/posts/${id}`),

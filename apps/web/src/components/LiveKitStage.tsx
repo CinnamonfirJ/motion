@@ -8,7 +8,7 @@ import {
 import { LiveKitRoom, RoomAudioRenderer, StartAudio, VideoTrack, isTrackReference, useLocalParticipant, useLocalParticipantPermissions, useParticipants, useTracks } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import "@livekit/components-styles";
-import { api, type LiveRoomDTO, type StreamDTO, type BanDTO } from "../lib/api";
+import { api, type LiveRoomDTO, type StreamDTO, type BanDTO, type StreamAnalyticsDTO } from "../lib/api";
 import { realtime } from "../lib/realtime";
 import { useMediaQuery } from "../lib/useMediaQuery";
 import { LiveChat } from "./LiveChat";
@@ -27,6 +27,19 @@ function formatUptime(ms: number): string {
   const m = Math.floor((total % 3600) / 60);
   if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
   return `${m}m`;
+}
+function formatDuration(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s >= 3600) return `${(s / 3600).toFixed(s % 3600 === 0 ? 0 : 1)}h`;
+  if (s >= 60) return `${Math.floor(s / 60)}m`;
+  return `${s}s`;
+}
+function timeAgo(ms: number): string {
+  const s = Math.floor((Date.now() - ms) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
 }
 
 // ---- studio (reference LAYOUT) rendered in ENNOIA's real style: SHARP rectangles, NO rounded,
@@ -48,26 +61,6 @@ const I = {
   users: <Users size={14} />, signal: <Signal size={14} />,
 };
 
-// Presentational demo values for the panels ENNOIA has no backend for (user-approved to match
-// the reference image). Marked as a preview; not live data.
-const DEMO = {
-  watchTime: "284h",
-  deltas: { viewers: "+24%", watch: "+18%", followers: "+12%" },
-  goalLabel: "Reach 15K followers",
-  latestFollower: "xaze4Life",
-  latestFollowerAgo: "2m ago",
-  topSupporter: "Papii1420",
-  topSupporterAmount: "$50.00",
-  cheersUser: "lunaLunarserver",
-  cheersAmount: "500 bits",
-  bans: [
-    { name: "ToxicPlayer123", meta: "Banned · 1h ago", action: "Unban" },
-    { name: "RageQuitter", meta: "Banned · 2h ago", action: "Unban" },
-    { name: "SpammerGuy", meta: "Timed out · 30m ago", action: "Remove Timeout" },
-    { name: "ClownFiesta", meta: "Banned · 3h ago", action: "Unban" },
-  ],
-};
-
 function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followerCount, onEnd }: { streamId: string; hostId: string; initialRole: Role } & StudioMeta) {
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = useLocalParticipant();
   const localPermissions = useLocalParticipantPermissions();
@@ -86,15 +79,25 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
     return () => clearInterval(t);
   }, []);
 
+  const [stats, setStats] = useState<StreamAnalyticsDTO | null>(null);
   const loadBans = useCallback(async () => {
     try { setBans((await api.bans(streamId)).bans); } catch { /* non-host or offline */ }
+  }, [streamId]);
+  const loadStats = useCallback(async () => {
+    try { setStats(await api.analytics(streamId)); } catch { /* non-host or offline */ }
   }, [streamId]);
   useEffect(() => {
     if (initialRole !== "host") return;
     void loadBans();
-    const off = realtime.on((e) => { if (e.t === "moderation" && e.streamId === streamId) void loadBans(); });
-    return off;
-  }, [initialRole, streamId, loadBans]);
+    void loadStats();
+    const timer = setInterval(() => void loadStats(), 10_000);
+    const off = realtime.on((e) => {
+      if (e.streamId !== streamId) return;
+      if (e.t === "moderation") void loadBans();
+      else if (e.t === "viewers" || e.t === "moment") void loadStats();
+    });
+    return () => { clearInterval(timer); off(); };
+  }, [initialRole, streamId, loadBans, loadStats]);
   const moderate = async (fn: () => Promise<unknown>) => {
     setPending(true); setError(null);
     try { await fn(); await loadBans(); }
@@ -205,12 +208,14 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
         {opts?.badge ? <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center bg-brand px-1 text-[10px] font-bold text-white">{opts.badge}</span> : null}
       </button>
     );
-    const statRow = (label: string, value: ReactNode, delta: string) => (
+    const statRow = (label: string, value: ReactNode, delta?: string) => (
       <div className="flex items-center justify-between">
         <div><p className="text-h3 leading-none text-text">{value}</p><p className={`mt-1 ${eyebrow}`}>{label}</p></div>
-        <span className="inline-flex items-center gap-0.5 font-mono text-micro font-semibold text-success">{I.up}{delta}</span>
+        {delta ? <span className="inline-flex items-center gap-0.5 font-mono text-micro font-semibold text-success">{I.up}{delta}</span> : null}
       </div>
     );
+    const followersNow = stats?.followers ?? followerCount ?? 0;
+    const goal = followersNow < 100 ? Math.ceil((followersNow + 1) / 10) * 10 : Math.ceil((followersNow + 1) / 100) * 100;
     const infoCard = (head: ReactNode, body: ReactNode) => <div className={`${S.card} p-3`}><p className={`mb-2 flex items-center gap-1.5 ${eyebrow}`}>{head}</p>{body}</div>;
     const outlineBtn = "border border-border px-3 py-1 font-mono text-micro uppercase tracking-[0.08em] text-text-secondary hover:border-borderStrong hover:text-text disabled:opacity-40";
     const primaryBtn = `${S.primary} px-3 py-1 font-mono text-micro uppercase tracking-[0.08em] disabled:opacity-40`;
@@ -252,9 +257,9 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
             <div>
               <h3 className={`mb-2 px-1 ${eyebrow}`}>Live Stats</h3>
               <div className={`${S.card} space-y-3 p-4`}>
-                {statRow("Viewers", live, DEMO.deltas.viewers)}
-                {statRow("Total Watch Time", DEMO.watchTime, DEMO.deltas.watch)}
-                {statRow("Followers", `+${followerCount ?? 0}`, DEMO.deltas.followers)}
+                {statRow("Viewers", stats?.currentViewers ?? live)}
+                {statRow("Total Watch Time", formatDuration(stats?.totalWatchTimeMs ?? 0))}
+                {statRow("Followers", followersNow, stats && stats.newFollowers > 0 ? `+${stats.newFollowers}` : undefined)}
               </div>
             </div>
             {error && <p role="alert" className={`${S.card} border-error/50 p-3 text-bodysm text-error`}>{error}</p>}
@@ -297,12 +302,12 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
               </div>
             </div>
 
-            {/* 4 info cards (presentational demo) */}
+            {/* 4 info cards — real data (goal from real followers; reactions/Moments/peak from live stats) */}
             <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-              {infoCard(<><span className="text-leaf">{I.star}</span>Current Goal</>, <><p className="text-bodysm font-semibold text-text">{DEMO.goalLabel}</p><div className="mt-2 h-1.5 overflow-hidden bg-surface3"><div className="h-full bg-brand" style={{ width: "83%" }} /></div><p className="mt-1 font-mono text-micro text-text-muted">12.4K / 15K</p></>)}
-              {infoCard("Latest Follower", <div className="flex items-center gap-2"><Avatar name={DEMO.latestFollower} size={26} /><div><p className="text-bodysm font-semibold text-text">{DEMO.latestFollower}</p><p className="font-mono text-micro text-text-muted">{DEMO.latestFollowerAgo}</p></div></div>)}
-              {infoCard(<>Top Supporter <span className="text-warning">{I.crown}</span></>, <div className="flex items-center gap-2"><Avatar name={DEMO.topSupporter} size={26} /><div><p className="text-bodysm font-semibold text-text">{DEMO.topSupporter}</p><p className="font-mono text-micro font-semibold text-leaf">{DEMO.topSupporterAmount}</p></div></div>)}
-              {infoCard(<><span className="text-leaf">{I.gift}</span>Recent Cheers</>, <div><p className="text-bodysm font-semibold text-text">{DEMO.cheersUser}</p><p className="font-mono text-micro text-text-muted">{DEMO.cheersAmount}</p></div>)}
+              {infoCard(<><span className="text-leaf">{I.star}</span>Current Goal</>, <><p className="text-bodysm font-semibold text-text">Reach {goal} followers</p><div className="mt-2 h-1.5 overflow-hidden bg-surface3"><div className="h-full bg-brand" style={{ width: `${Math.min(100, Math.round((followersNow / goal) * 100))}%` }} /></div><p className="mt-1 font-mono text-micro text-text-muted">{followersNow} / {goal}</p></>)}
+              {infoCard("Latest Follower", stats?.latestFollower ? <div className="flex items-center gap-2"><Avatar name={stats.latestFollower.displayName} url={stats.latestFollower.avatarUrl} size={26} /><div><p className="text-bodysm font-semibold text-text">{stats.latestFollower.displayName}</p><p className="font-mono text-micro text-text-muted">{timeAgo(stats.latestFollower.at)}</p></div></div> : <p className="font-mono text-micro text-text-muted">No followers yet.</p>)}
+              {infoCard(<><span className="text-leaf">{I.chart}</span>This Stream</>, <div className="flex gap-5"><div><p className="text-bodysm font-semibold text-text">{stats?.reactionCount ?? 0}</p><p className="font-mono text-micro text-text-muted">Reactions</p></div><div><p className="text-bodysm font-semibold text-text">{stats?.momentCount ?? 0}</p><p className="font-mono text-micro text-text-muted">Moments</p></div></div>)}
+              {infoCard(<><span className="text-warning">{I.crown}</span>Peak Viewers</>, <div><p className="text-bodysm font-semibold text-text">{stats?.peakViewers ?? live}</p><p className="font-mono text-micro text-text-muted">{stats?.uniqueViewers ?? 0} unique</p></div>)}
             </div>
 
             {/* REAL host popovers — the image's "Mic Requests" + "Guest Invite" cards, functional */}

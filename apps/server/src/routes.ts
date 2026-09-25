@@ -10,6 +10,7 @@ import { roomTokenFor } from "./livekit.js";
 import { LiveRooms } from "./liveRooms.js";
 import { LiveChat, CHAT_MAX_LEN } from "./liveChat.js";
 import { Moderation, type BanKind } from "./moderation.js";
+import { Analytics } from "./analytics.js";
 import { topCurators, trendingMoments, rewardHistory } from "./envio.js";
 import { createHmac, randomBytes } from "node:crypto";
 import { ingestReaction, config, demoFastForwardSettlement } from "./momentEngine.js";
@@ -458,6 +459,36 @@ export async function registerRoutes(app: FastifyInstance) {
     const removed = await LiveChat.remove(messageId, user.id);
     if (removed) hub.broadcastStream(id, { t: "chat_deleted", streamId: id, messageId });
     return { ok: removed };
+  });
+
+  // ---------- analytics (host only) — real presence + persisted counters, no estimates ----------
+  app.get("/streams/:id/analytics", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const { id } = req.params as { id: string };
+    const stream = await Streams.byId(id);
+    if (!stream) return reply.code(404).send({ error: "not found" });
+    if (stream.creatorId !== user.id) return reply.code(403).send({ error: "host-only" });
+    const presence = hub.streamStats(id);
+    const [reactionCount, momentCount, followers, newFollowers, latestFollower] = await Promise.all([
+      Analytics.reactionCount(id),
+      Analytics.momentCount(id),
+      Analytics.followerCount(stream.creatorId),
+      Analytics.newFollowers(stream.creatorId, stream.startedAt),
+      Analytics.latestFollower(stream.creatorId),
+    ]);
+    return {
+      currentViewers: presence.current,
+      peakViewers: presence.peak,
+      uniqueViewers: presence.unique,
+      totalWatchTimeMs: presence.watchMs,
+      streamDurationMs: Math.max(0, Date.now() - stream.startedAt),
+      reactionCount,
+      momentCount,
+      followers,
+      newFollowers,
+      latestFollower,
+    };
   });
 
   // ---------- moderation (bans / timeouts) — host only, realtime-enforced ----------
