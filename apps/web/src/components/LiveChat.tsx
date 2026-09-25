@@ -17,11 +17,12 @@ const newClientId = () =>
  * the server, so a slow DB write never delays delivery. On reconnect we re-sync history so nothing
  * is lost and nothing duplicates.
  */
-export function LiveChat({ streamId, isHost, onlineCount, className = "" }: { streamId: string; isHost: boolean; onlineCount?: number; className?: string }) {
+export function LiveChat({ streamId, isHost, onlineCount, className = "", onModerate }: { streamId: string; isHost: boolean; onlineCount?: number; className?: string; onModerate?: (userId: string) => void }) {
   const { user } = useSession();
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [banned, setBanned] = useState(false);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
   const [unread, setUnread] = useState(0);
   const scroller = useRef<HTMLDivElement>(null);
@@ -62,9 +63,12 @@ export function LiveChat({ streamId, isHost, onlineCount, className = "" }: { st
         });
       } else if (ev?.t === "chat_deleted" && ev.streamId === streamId) {
         setMessages((prev) => prev.filter((m) => m.id !== ev.messageId));
+      } else if (ev?.t === "moderation" && ev.streamId === streamId && ev.userId === user?.id) {
+        setBanned(ev.banned);
+        if (!ev.banned) setError(null);
       }
     });
-  }, [streamId]);
+  }, [streamId, user?.id]);
 
   const atBottom = () => {
     const el = scroller.current;
@@ -100,6 +104,7 @@ export function LiveChat({ streamId, isHost, onlineCount, className = "" }: { st
       await api.sendChat(streamId, body, clientId); // canonical arrives via broadcast → reconciles
     } catch (e: any) {
       const code = String(e?.message ?? e);
+      if (code === "banned") { setBanned(true); setMessages((prev) => prev.filter((m) => m.clientId !== clientId)); return; }
       if (code === "rate-limited") setError("Slow down a moment — you're chatting fast.");
       else if (code === "too-long") setError("That message is a little long.");
       else setError("Message couldn't send. Retry.");
@@ -147,6 +152,9 @@ export function LiveChat({ streamId, isHost, onlineCount, className = "" }: { st
                 <span className="text-text">{m.body}</span>
                 {m.failed && <button onClick={() => retry(m)} className="ml-2 font-mono text-micro uppercase tracking-[0.1em] text-error hover:underline">Failed · Retry</button>}
               </p>
+              {isHost && onModerate && m.author.id !== user?.id && !m.pending && (
+                <button onClick={() => onModerate(m.author.id)} aria-label={`Time out ${m.author.displayName}`} title="Time out (10m)" className="shrink-0 px-1 font-mono text-micro text-text-muted opacity-0 transition-opacity hover:text-warning group-hover:opacity-100">⊘</button>
+              )}
               {(isHost || m.author.id === user?.id) && (
                 <button onClick={() => void remove(m)} aria-label="Remove message" className="shrink-0 px-1 font-mono text-micro text-text-muted opacity-0 transition-opacity hover:text-error group-hover:opacity-100">×</button>
               )}
@@ -162,7 +170,9 @@ export function LiveChat({ streamId, isHost, onlineCount, className = "" }: { st
 
       <footer className="border-t border-border p-2">
         {error && <p role="alert" className="mb-1 px-1 text-micro text-error">{error}</p>}
-        {user ? (
+        {banned ? (
+          <p className="px-1 py-1 font-mono text-micro uppercase tracking-[0.1em] text-error">You can't chat in this stream right now.</p>
+        ) : user ? (
           <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); send(); }}>
             <input
               value={draft}

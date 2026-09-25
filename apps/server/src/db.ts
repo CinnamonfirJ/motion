@@ -176,6 +176,17 @@ CREATE TABLE IF NOT EXISTS stream_messages (
 );
 CREATE INDEX IF NOT EXISTS idx_stream_messages_recent ON stream_messages(streamId, createdAt);
 
+CREATE TABLE IF NOT EXISTS stream_bans (
+  streamId TEXT NOT NULL REFERENCES streams(id) ON DELETE CASCADE,
+  userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,          -- ban (permanent) or timeout (expiresAt set)
+  expiresAt BIGINT,            -- null = permanent, epoch ms = timeout expiry
+  createdAt BIGINT NOT NULL,
+  byUserId TEXT NOT NULL,
+  PRIMARY KEY (streamId, userId)
+);
+CREATE INDEX IF NOT EXISTS idx_stream_bans_stream ON stream_bans(streamId);
+
 CREATE TABLE IF NOT EXISTS reactions (
   id TEXT PRIMARY KEY,
   eventId TEXT UNIQUE NOT NULL,

@@ -9,6 +9,7 @@ import { processAccountDeletionJob } from "./accountDeletion.js";
 import { roomTokenFor } from "./livekit.js";
 import { LiveRooms } from "./liveRooms.js";
 import { LiveChat, CHAT_MAX_LEN } from "./liveChat.js";
+import { Moderation, type BanKind } from "./moderation.js";
 import { topCurators, trendingMoments, rewardHistory } from "./envio.js";
 import { createHmac, randomBytes } from "node:crypto";
 import { ingestReaction, config, demoFastForwardSettlement } from "./momentEngine.js";
@@ -325,6 +326,7 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!stream) return reply.code(404).send({ error: "not-found" });
     if (!stream.isLive) return reply.code(409).send({ error: "stream-ended" });
     if (stream.creatorId === user.id) return reply.code(400).send({ error: "host-cannot-request" });
+    if (await Moderation.isBanned(id, user.id)) return reply.code(403).send({ error: "banned" });
     const current = await LiveRooms.speaker(id, user.id);
     // A repeated click or a stale room snapshot must not turn an existing invite into an error.
     // In particular, an invite still needs to be accepted by the viewer.
@@ -429,6 +431,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const stream = await Streams.byId(id);
     if (!stream) return reply.code(404).send({ error: "not found" });
     if (!stream.isLive) return reply.code(409).send({ error: "stream-ended" });
+    if (await Moderation.isBanned(id, user.id)) return reply.code(403).send({ error: "banned" });
     const body = (req.body ?? {}) as { body?: string; clientId?: string };
     const result = LiveChat.build(id, user, String(body.body ?? ""), typeof body.clientId === "string" ? body.clientId : undefined);
     if (!result.ok) {
@@ -455,6 +458,51 @@ export async function registerRoutes(app: FastifyInstance) {
     const removed = await LiveChat.remove(messageId, user.id);
     if (removed) hub.broadcastStream(id, { t: "chat_deleted", streamId: id, messageId });
     return { ok: removed };
+  });
+
+  // ---------- moderation (bans / timeouts) — host only, realtime-enforced ----------
+  app.get("/streams/:id/bans", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const { id } = req.params as { id: string };
+    const stream = await Streams.byId(id);
+    if (!stream) return reply.code(404).send({ error: "not found" });
+    if (stream.creatorId !== user.id) return reply.code(403).send({ error: "host-only" });
+    return { bans: await Moderation.list(id) };
+  });
+
+  app.post("/streams/:id/bans", async (req, reply) => {
+    const host = await bearer(req);
+    if (!host) return reply.code(401).send({ error: "unauthorized" });
+    const { id } = req.params as { id: string };
+    const stream = await Streams.byId(id);
+    if (!stream) return reply.code(404).send({ error: "not found" });
+    if (stream.creatorId !== host.id) return reply.code(403).send({ error: "host-only" });
+    const body = (req.body ?? {}) as { userId?: string; kind?: BanKind; durationMs?: number };
+    if (!body.userId || !validSpeakerUserId(body.userId)) return reply.code(400).send({ error: "invalid-user" });
+    if (body.userId === host.id) return reply.code(400).send({ error: "cannot-ban-self" });
+    if (!await Users.byId(body.userId)) return reply.code(404).send({ error: "user-not-found" });
+    const kind: BanKind = body.kind === "timeout" ? "timeout" : "ban";
+    await Moderation.apply(id, body.userId, kind, host.id, body.durationMs);
+    // A ban revokes any speaker/guest state immediately.
+    if (livekitConfigured()) await LiveRooms.setSpeaker(id, body.userId, null).catch(() => {});
+    hub.broadcastStream(id, { t: "moderation", streamId: id, userId: body.userId, banned: true });
+    hub.sendToUser(body.userId, { t: "moderation", streamId: id, userId: body.userId, banned: true });
+    return { ok: true };
+  });
+
+  app.delete("/streams/:id/bans/:userId", async (req, reply) => {
+    const host = await bearer(req);
+    if (!host) return reply.code(401).send({ error: "unauthorized" });
+    const { id, userId } = req.params as { id: string; userId: string };
+    if (!validSpeakerUserId(userId)) return reply.code(400).send({ error: "invalid-user" });
+    const stream = await Streams.byId(id);
+    if (!stream) return reply.code(404).send({ error: "not found" });
+    if (stream.creatorId !== host.id) return reply.code(403).send({ error: "host-only" });
+    await Moderation.remove(id, userId);
+    hub.broadcastStream(id, { t: "moderation", streamId: id, userId, banned: false });
+    hub.sendToUser(userId, { t: "moderation", streamId: id, userId, banned: false });
+    return { ok: true };
   });
 
   // ---------- reactions ----------

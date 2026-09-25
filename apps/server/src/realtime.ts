@@ -25,6 +25,7 @@ export type ServerEvent =
   | { t: "live_room"; streamId: string }
   | { t: "chat"; streamId: string; serverBroadcastAt?: number; message: { id: string; body: string; createdAt: number; clientId?: string; author: { id: string; displayName: string; handle: string; avatarUrl: string | null } } }
   | { t: "chat_deleted"; streamId: string; messageId: string }
+  | { t: "moderation"; streamId: string; userId: string; banned: boolean }
   | { t: "ping"; serverTime: number }
   | { t: "feed"; postId: string };
 

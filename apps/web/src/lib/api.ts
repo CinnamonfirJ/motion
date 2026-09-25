@@ -153,6 +153,16 @@ export interface ChatMessageDTO {
   author: CreatorMini;
 }
 
+export interface BanDTO {
+  userId: string;
+  kind: "ban" | "timeout";
+  expiresAt: number | null;
+  createdAt: number;
+  displayName: string;
+  handle: string;
+  avatarUrl: string | null;
+}
+
 export interface PostDTO {
   id: string;
   author: CreatorMini;
@@ -268,6 +278,10 @@ export const api = {
     req<{ messages: ChatMessageDTO[] }>(`/streams/${id}/chat?${new URLSearchParams({ ...(before ? { before: String(before) } : {}) })}`, { signal }),
   sendChat: (id: string, body: string, clientId?: string) => req<{ ok: boolean; message: ChatMessageDTO }>(`/streams/${id}/chat`, { method: "POST", body: JSON.stringify({ body, clientId }) }),
   deleteChat: (id: string, messageId: string) => req<{ ok: boolean }>(`/streams/${id}/chat/${messageId}`, { method: "DELETE" }),
+  bans: (id: string) => req<{ bans: BanDTO[] }>(`/streams/${id}/bans`),
+  banUser: (id: string, userId: string, kind: "ban" | "timeout" = "ban", durationMs?: number) =>
+    req<{ ok: boolean }>(`/streams/${id}/bans`, { method: "POST", body: JSON.stringify({ userId, kind, durationMs }) }),
+  unban: (id: string, userId: string) => req<{ ok: boolean }>(`/streams/${id}/bans/${userId}`, { method: "DELETE" }),
   feed: (mode: "for-you" | "following", before?: number, communityId?: string) =>
     req<{ items: FeedItemDTO[]; nextBefore: number | null }>(`/feed?${new URLSearchParams({ mode, ...(before ? { before: String(before) } : {}), ...(communityId ? { communityId } : {}) })}`),
   post: (id: string) => req<{ post: PostDTO }>(`/posts/${id}`),

@@ -8,7 +8,7 @@ import {
 import { LiveKitRoom, RoomAudioRenderer, StartAudio, VideoTrack, isTrackReference, useLocalParticipant, useLocalParticipantPermissions, useParticipants, useTracks } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import "@livekit/components-styles";
-import { api, type LiveRoomDTO, type StreamDTO } from "../lib/api";
+import { api, type LiveRoomDTO, type StreamDTO, type BanDTO } from "../lib/api";
 import { realtime } from "../lib/realtime";
 import { useMediaQuery } from "../lib/useMediaQuery";
 import { LiveChat } from "./LiveChat";
@@ -78,12 +78,29 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nowTs, setNowTs] = useState(Date.now());
+  const [bans, setBans] = useState<BanDTO[]>([]);
   const wide = useMediaQuery("(min-width: 1024px)");
 
   useEffect(() => {
     const t = setInterval(() => setNowTs(Date.now()), 30_000);
     return () => clearInterval(t);
   }, []);
+
+  const loadBans = useCallback(async () => {
+    try { setBans((await api.bans(streamId)).bans); } catch { /* non-host or offline */ }
+  }, [streamId]);
+  useEffect(() => {
+    if (initialRole !== "host") return;
+    void loadBans();
+    const off = realtime.on((e) => { if (e.t === "moderation" && e.streamId === streamId) void loadBans(); });
+    return off;
+  }, [initialRole, streamId, loadBans]);
+  const moderate = async (fn: () => Promise<unknown>) => {
+    setPending(true); setError(null);
+    try { await fn(); await loadBans(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Moderation action failed."); }
+    finally { setPending(false); }
+  };
 
   const refresh = useCallback(async () => {
     try { setState(await api.liveRoom(streamId)); setError((current) => current === "Room controls could not refresh. Retrying…" ? null : current); }
@@ -333,7 +350,7 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
                 <span className="flex items-center gap-2 text-bodysm font-semibold text-text">{I.chatIcon}Live Chat</span>
                 <span className="flex items-center gap-2 font-mono text-micro text-text-muted">{I.users}{live} online <span className="text-text-muted">{I.gear}</span></span>
               </header>
-              <LiveChat streamId={streamId} isHost onlineCount={live} className="min-h-0 flex-1 border-0" />
+              <LiveChat streamId={streamId} isHost onlineCount={live} className="min-h-0 flex-1 border-0" onModerate={(userId) => void moderate(() => api.banUser(streamId, userId, "timeout", 10 * 60_000))} />
             </div>
             <div className={`${S.card} flex min-h-0 flex-col overflow-hidden`}>
               <header className="flex items-center gap-2 border-b border-border px-3 py-2.5 text-bodysm font-semibold text-text">{I.shield}Moderation</header>
@@ -344,11 +361,13 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
               </div>
               <div className="px-3 py-2"><input aria-label="Search users" placeholder="Search users…" className="w-full border border-border bg-surface2 px-3 py-1.5 text-bodysm text-text placeholder:text-text-muted focus:border-borderStrong focus:outline-none" /></div>
               <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-3">
-                {DEMO.bans.map((b) => (
-                  <div key={b.name} className="flex items-center gap-2 py-1.5">
-                    <Avatar name={b.name} size={28} />
-                    <div className="min-w-0 flex-1"><p className="truncate text-bodysm font-semibold text-text">{b.name}</p><p className="font-mono text-micro text-text-muted">{b.meta}</p></div>
-                    <button className={outlineBtn}>{b.action}</button>
+                {bans.length === 0 ? (
+                  <p className="mt-2 font-mono text-micro text-text-muted">No bans or timeouts. Hover a chat message and use ⊘ to time a viewer out.</p>
+                ) : bans.map((b) => (
+                  <div key={b.userId} className="flex items-center gap-2 py-1.5">
+                    <Avatar name={b.displayName} url={b.avatarUrl} size={28} />
+                    <div className="min-w-0 flex-1"><p className="truncate text-bodysm font-semibold text-text">{b.displayName}</p><p className="font-mono text-micro text-text-muted">{b.kind === "timeout" ? `Timed out${b.expiresAt ? ` · ${Math.max(0, Math.round((b.expiresAt - nowTs) / 60000))}m left` : ""}` : "Banned"}</p></div>
+                    <button className={outlineBtn} disabled={pending} onClick={() => void moderate(() => api.unban(streamId, b.userId))}>{b.kind === "timeout" ? "Remove" : "Unban"}</button>
                   </div>
                 ))}
               </div>
