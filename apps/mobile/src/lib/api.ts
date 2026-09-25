@@ -61,6 +61,7 @@ export interface StreamDTO {
   isLive: boolean;
   viewerCount: number;
   mode: "livekit" | "vod";
+  recording: boolean | null;
   livekitRoom: string | null;
   creator: { id: string; displayName: string; handle: string; avatarUrl: string | null } | null;
 }

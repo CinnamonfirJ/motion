@@ -17,7 +17,7 @@ export function GoLive() {
       const result = await api.createStream(title.trim());
       navigate(`/live/${result.stream.id}`, { replace: true });
     } catch {
-      setError("ENNOIA could not start the LiveKit room or permanent recording. Check the service configuration and try again.");
+      setError("ENNOIA couldn't start your live room. Check your connection and try again in a moment.");
     } finally {
       setBusy(false);
     }
@@ -28,7 +28,7 @@ export function GoLive() {
       <form onSubmit={start} className="space-y-5">
         <div>
           <h1 className="text-h2">Go live</h1>
-          <p className="mt-2 text-body text-text-secondary">Your camera and microphone begin after the room and R2 recording are ready.</p>
+          <p className="mt-2 text-body text-text-secondary">Give your stream a title, then go live. You control your camera and mic from the studio once you're on.</p>
         </div>
         <label className="block">
           <span className="eyebrow text-micro text-text-muted">Stream title</span>

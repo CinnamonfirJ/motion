@@ -18,7 +18,7 @@ export function GoLive() {
       const result = await api.createStream(title.trim());
       navigation.replace("Live", { id: result.stream.id });
     } catch {
-      setError("ENNOIA could not start the room or its permanent recording. Check your connection and try again.");
+      setError("ENNOIA couldn't start your live room. Check your connection and try again in a moment.");
     } finally {
       setBusy(false);
     }

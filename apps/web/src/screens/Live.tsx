@@ -237,6 +237,11 @@ export function Live() {
               <div className="min-w-0">
                 <h1 className="truncate text-h3 text-text">{stream.title}</h1>
                 <p className="mt-1 font-mono text-micro uppercase tracking-[0.1em] text-text-muted">{stream.creator?.displayName} · {viewerCount} watching</p>
+                {isCreator && stream.mode === "livekit" && stream.recording === false && (
+                  <p className="mt-1.5 inline-flex items-center gap-1.5 border border-warning/40 bg-warning/10 px-2 py-0.5 font-mono text-micro uppercase tracking-[0.1em] text-warning" role="status">
+                    <span aria-hidden>⦿</span> Not recording · clips won't save this stream
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <button className={chip} onClick={() => void share()}>↗ Share</button>

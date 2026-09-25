@@ -23,6 +23,9 @@ export async function streamView(s: Stream, viewerCount: number) {
   // A stream renders as a real LiveKit room when LiveKit is configured AND it has no VOD source;
   // seeded sample streams keep a videoUrl and play through the fake-live VOD player.
   const mode: "livekit" | "vod" = livekitConfigured() && !s.videoUrl ? "livekit" : "vod";
+  // Whether an Egress recording is running for this stream (null for VOD/fake-live). Lets the
+  // host UI show a "not recording" note when permanent clips won't be captured.
+  const recording = mode === "livekit" ? Boolean((await Streams.recording(s.id))?.egressId) : null;
   return {
     id: s.id,
     title: s.title,
@@ -33,6 +36,7 @@ export async function streamView(s: Stream, viewerCount: number) {
     isLive: s.isLive,
     viewerCount,
     mode,
+    recording,
     livekitRoom: mode === "livekit" ? roomNameForStream(s.id) : null,
     creator: creator ? { id: creator.id, displayName: creator.displayName, handle: creator.handle, avatarUrl: creator.avatarUrl } : null,
   };
