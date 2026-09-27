@@ -232,7 +232,7 @@ function HowItWorks() {
 }
 
 const FAQ_ITEMS = [
-  { q: "Do I need to know anything about crypto?", a: "No. You sign in with a passkey — Face ID, Windows Hello or your fingerprint — and your passkey creates an account on Monad. Your balance shows in plain dollars. No seed phrase, no wallet to install, no gas to buy." },
+  { q: "Do I need to know anything about crypto?", a: "No. You sign in with a passkey — Face ID, Windows Hello or your fingerprint — and your passkey creates an account on Monad (Privy). Your balance shows in plain dollars. No seed phrase, no wallet to install, no gas to buy." },
   { q: "How do I earn?", a: "React early to streams. When enough people react to the same moment, the earliest qualifying scouts become Founding Curators and share the reward for that Moment." },
   { q: "What is a Moment?", a: "A 35-second clip — 15 seconds before a reaction spike and 20 seconds after — automatically captured when the crowd's reactions accelerate past the stream's normal rhythm." },
   { q: "Where does the reward come from?", a: "A pre-funded reward pool on Monad. Each confirmed Moment splits its reward between the creator and the Founding Curators, settled in a real onchain transaction." },
@@ -294,7 +294,7 @@ function StartSection() {
             <TagChip className="self-start">Start free</TagChip>
             <h2 className="mt-5 text-h1 md:text-display">Your first find is out there.</h2>
             <p className="mt-4 max-w-sm font-mono text-body text-text-secondary">
-              Your passkey creates an account on Monad. No seed phrase. Unlock with Face ID, Windows Hello or your
+              Your passkey creates an account on Monad (Privy). No seed phrase. Unlock with Face ID, Windows Hello or your
               fingerprint — the crypto stays out of the way.
             </p>
             <ul className="mt-6 space-y-3">
@@ -359,7 +359,7 @@ function StartSection() {
             )}
 
             {error && <p className="font-mono text-bodysm text-error">{error}</p>}
-            <p className="font-mono text-micro text-text-muted">Your passkey creates an account on Monad. No seed phrase.</p>
+            <p className="font-mono text-micro text-text-muted">Your passkey creates an account on Monad (Privy). No seed phrase.</p>
           </div>
         </div>
       </PlusFrame>

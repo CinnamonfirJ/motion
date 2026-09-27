@@ -94,7 +94,7 @@ export function SignIn() {
             )}
 
             {error ? <Text style={{ color: color.error, ...type.bodysm, textAlign: "center" }}>{error}</Text> : null}
-            <Text style={{ color: color.textMuted, ...type.micro, textAlign: "center" }}>Your passkey creates an account on Monad. No seed phrase.</Text>
+            <Text style={{ color: color.textMuted, ...type.micro, textAlign: "center" }}>Your passkey creates an account on Monad (Privy). No seed phrase.</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
