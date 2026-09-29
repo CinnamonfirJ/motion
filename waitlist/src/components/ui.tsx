@@ -64,7 +64,7 @@ export function Logo() {
     <div className="flex items-center gap-2">
       <span className="relative h-8 w-8 overflow-hidden" aria-hidden="true">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/waitlist/ennoia-mark.png" alt="" className="absolute left-1/2 top-1/2 h-20 w-20 max-w-none -translate-x-1/2 -translate-y-1/2 object-contain" />
+        <img src="/ennoia-mark.png" alt="" className="absolute left-1/2 top-1/2 h-20 w-20 max-w-none -translate-x-1/2 -translate-y-1/2 object-contain" />
       </span>
       <span className="text-h3 font-bold tracking-[0.08em]">ENNOIA</span>
     </div>

@@ -5,8 +5,6 @@
   "buildCommand": "npx --yes pnpm@11.5.0 --filter @ennoia/core build && npx --yes pnpm@11.5.0 --filter @ennoia/web build",
   "outputDirectory": "apps/web/dist",
   "rewrites": [
-    { "source": "/waitlist", "destination": "https://ennoia-waitlist-zeta.vercel.app/waitlist" },
-    { "source": "/waitlist/:path*", "destination": "https://ennoia-waitlist-zeta.vercel.app/waitlist/:path*" },
     { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ]
 }

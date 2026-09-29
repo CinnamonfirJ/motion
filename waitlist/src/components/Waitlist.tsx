@@ -112,7 +112,7 @@ export function Waitlist() {
 
   useEffect(() => {
     setJoined(readStored());
-    fetch("/waitlist/api/waitlist", { cache: "no-store" })
+    fetch("/api/waitlist", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((r: { count: number } | null) => setCount(r ? r.count : null))
       .catch(() => setCount(null));
@@ -327,7 +327,7 @@ function JoinForm({ onJoined }: { onJoined: (r: JoinResult) => void }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/waitlist/api/waitlist", {
+      const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), name: name.trim() || undefined, role, ref, website }),
@@ -443,7 +443,7 @@ function Joined({ result }: { result: JoinResult }) {
   const [link, setLink] = useState("");
 
   useEffect(() => {
-    setLink(`${window.location.origin}/waitlist?ref=${encodeURIComponent(result.referralCode)}`);
+    setLink(`${window.location.origin}/?ref=${result.referralCode}`);
   }, [result.referralCode]);
 
   const copy = async () => {
