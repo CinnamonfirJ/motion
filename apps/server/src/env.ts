@@ -99,6 +99,11 @@ export const env = {
   ENABLE_DEMO_ROUTES: (process.env.ENABLE_DEMO_ROUTES ?? (mode === "development" ? "true" : "false")) === "true",
   ADMIN_PRIVY_IDS: list(process.env.ADMIN_PRIVY_IDS),
 
+  /** Shared secret for the one-off demo content seeder (POST /admin/seed-demo). Inert unless set.
+   *  Unlike ENABLE_SEED/ENABLE_DEMO_ROUTES this is allowed in production — it mutates nothing until
+   *  called with the matching secret, and only writes clearly-tagged, reversible demo fixtures. */
+  DEMO_SEED_SECRET: process.env.DEMO_SEED_SECRET ?? "",
+
   /** Passkey (WebAuthn) relying party. RP_ID must be a registrable domain of the web origin
    *  (use "localhost" for local dev — passkeys don't work over a raw LAN IP). */
   RP_ID: process.env.RP_ID ?? "localhost",
