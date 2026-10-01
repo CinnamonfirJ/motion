@@ -10,11 +10,11 @@ export const metadata: Metadata = {
   title: "ENNOIA — Join the waitlist",
   description:
     "Spot the livestream moment before everyone else. React live, catch the spike, and get paid on Monad. Join the ENNOIA waitlist.",
-  icons: { icon: "/favicon.png" },
+  icons: { icon: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/favicon.png` },
   openGraph: {
     title: "ENNOIA — Join the waitlist",
     description: "Spot the livestream moment before everyone else.",
-    images: ["/ennoia-mark.png"],
+    images: [`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/ennoia-mark.png`],
   },
 };
 
