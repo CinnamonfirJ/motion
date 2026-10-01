@@ -21,6 +21,7 @@ import { getChain, momentIdHash, toBytes32 } from "./chain.js";
 import { streamTimeMs } from "@ennoia/core";
 import { permanentMediaConfigured, startStreamRecording, stopStreamRecording } from "./media.js";
 import { registerSocialRoutes } from "./social.js";
+import { seedDemo } from "./demoSeed.js";
 
 async function bearer(req: FastifyRequest): Promise<User | null> {
   const h = req.headers.authorization;
@@ -815,6 +816,24 @@ export async function registerRoutes(app: FastifyInstance) {
     if (body.status !== "resolved" && body.status !== "dismissed") return reply.code(400).send({ error: "invalid-status" });
     await Safety.resolveReport(id, body.status);
     return { ok: true };
+  });
+
+  // ---------- one-off demo content seeder (screenshot fixtures) ----------
+  // Gated by DEMO_SEED_SECRET (inert unless that env is set). Attaches reversible, clearly-tagged
+  // demo data — moments, earnings, posts, followers, a cast of accounts — to the account whose
+  // @handle you pass (the one you signed into the app with). Safe to re-run: it resets first.
+  app.post("/admin/seed-demo", async (req, reply) => {
+    const body = (req.body ?? {}) as { handle?: string; secret?: string; reset?: boolean };
+    const provided = (req.headers["x-seed-secret"] as string | undefined) ?? body.secret;
+    if (!env.DEMO_SEED_SECRET || provided !== env.DEMO_SEED_SECRET) return reply.code(403).send({ error: "forbidden" });
+    if (!body.handle) return reply.code(400).send({ error: "handle-required" });
+    try {
+      return await seedDemo({ targetHandle: body.handle, reset: body.reset !== false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      req.log.error({ error }, "demo-seed-failed");
+      return reply.code(message === "target-not-found" ? 404 : 500).send({ error: message });
+    }
   });
 
   app.delete("/me", async (req, reply) => {
