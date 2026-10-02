@@ -269,6 +269,8 @@ export const api = {
       body: JSON.stringify({ accessToken, displayName }),
     }),
   me: () => req<{ user: UserDTO; wallet: { address: string; network: string; onchain: boolean } }>("/me"),
+  updateProfile: (input: { displayName?: string; handle?: string; avatarUrl?: string | null }) =>
+    req<{ user: UserDTO; privySynced: boolean }>("/me", { method: "PATCH", body: JSON.stringify(input) }),
   streams: () => req<{ streams: StreamDTO[] }>("/streams"),
   stream: (id: string, signal?: AbortSignal) =>
     req<{ stream: StreamDTO; sync: SyncDTO; activeMoments: MomentDTO[]; recentReactionCount: number }>(`/streams/${id}`, { signal }),

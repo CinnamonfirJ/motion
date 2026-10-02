@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { Alert, Linking, ScrollView, Text, View, Pressable } from "react-native";
+import { Alert, Linking, ScrollView, Text, TextInput, View, Pressable } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { File } from "expo-file-system";
+import { fetch as expoFetch } from "expo/fetch";
 import { useSession } from "../session";
 import { api } from "../lib/api";
 import { Avatar, Button, Card } from "../components/ui";
@@ -9,10 +12,12 @@ export function Profile() {
   const { user, logout } = useSession();
   const [scout, setScout] = useState<any>(null);
   const [showWallet, setShowWallet] = useState(false);
+  const [editing, setEditing] = useState(false);
   useEffect(() => {
     api.scoutEarnings().then(setScout).catch(() => {});
   }, []);
   if (!user) return null;
+  if (editing) return <EditProfile onClose={() => setEditing(false)} />;
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: color.night }} contentContainerStyle={{ padding: 16, gap: 20 }}>
@@ -22,6 +27,7 @@ export function Profile() {
           <Text style={{ color: color.text, ...type.h2 }}>{user.displayName}</Text>
           <Text style={{ color: color.textMuted, ...type.bodysm }}>@{user.handle}</Text>
         </View>
+        <Button title="Edit profile" variant="secondary" onPress={() => setEditing(true)} />
       </View>
 
       <View style={{ flexDirection: "row", gap: 12 }}>
@@ -63,6 +69,103 @@ export function Profile() {
           ]
         )}
       />
+    </ScrollView>
+  );
+}
+
+const AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+function EditProfile({ onClose }: { onClose: () => void }) {
+  const { user, updateProfile } = useSession();
+  const [displayName, setDisplayName] = useState(user?.displayName ?? "");
+  const [handle, setHandle] = useState(user?.handle ?? "");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatarUrl ?? null);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!user) return null;
+
+  const message = (code?: string) =>
+    ({
+      "handle-taken": "That handle is already taken.",
+      "invalid-handle": "Handle must be 3–20 chars: letters, numbers or underscore.",
+      "invalid-display-name": "Name must be 1–40 characters.",
+      "invalid-avatar-url": "That image couldn't be used. Try another.",
+    } as Record<string, string>)[code ?? ""] ?? "Couldn't save. Please try again.";
+
+  const pickAvatar = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 0.85 });
+      if (result.canceled) return;
+      const asset = result.assets[0]!;
+      const mime = asset.mimeType ?? "image/jpeg";
+      if (!AVATAR_TYPES.has(mime)) { setError("Use a JPG, PNG or WebP image."); return; }
+      setError(null);
+      setUploading(true);
+      const file = new File(asset.uri);
+      const size = asset.fileSize ?? file.size;
+      const signed = await api.uploadPostMedia(mime, size);
+      const uploaded = await expoFetch(signed.uploadUrl, { method: "PUT", headers: { "Content-Type": mime }, body: file });
+      if (!uploaded.ok) throw new Error("upload-failed");
+      setAvatarUrl(signed.publicUrl);
+    } catch {
+      setError("Image upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const save = async () => {
+    setError(null);
+    setSaving(true);
+    try {
+      await updateProfile({ displayName, handle, avatarUrl });
+      onClose();
+    } catch (e: any) {
+      setError(message(e?.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputStyle = { borderWidth: 1, borderColor: color.border, backgroundColor: color.surface1, color: color.text, paddingHorizontal: 14, paddingVertical: 12, ...type.body } as const;
+
+  return (
+    <ScrollView style={{ flex: 1, backgroundColor: color.night }} contentContainerStyle={{ padding: 16, gap: 18 }} keyboardShouldPersistTaps="handled">
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <Text style={{ color: color.text, ...type.h2 }}>Edit profile</Text>
+        <Text onPress={onClose} style={{ color: color.textMuted, ...eyebrow(11) }}>Cancel</Text>
+      </View>
+
+      <View style={{ alignItems: "center", gap: 10 }}>
+        <Avatar name={displayName || user.displayName} url={avatarUrl} size={88} />
+        <Button title={uploading ? "Uploading…" : "Change photo"} variant="secondary" onPress={pickAvatar} disabled={uploading} />
+        {avatarUrl ? <Text onPress={() => setAvatarUrl(null)} style={{ color: color.textMuted, ...eyebrow(11) }}>Remove photo</Text> : null}
+      </View>
+
+      <View style={{ gap: 6 }}>
+        <Text style={{ color: color.textMuted, ...eyebrow(11) }}>Display name</Text>
+        <TextInput value={displayName} onChangeText={setDisplayName} maxLength={40} placeholder="Your name" placeholderTextColor={color.textMuted} style={inputStyle} />
+      </View>
+
+      <View style={{ gap: 6 }}>
+        <Text style={{ color: color.textMuted, ...eyebrow(11) }}>Handle</Text>
+        <TextInput
+          value={handle}
+          onChangeText={(t) => setHandle(t.replace(/[^a-zA-Z0-9_]/g, "").toLowerCase())}
+          maxLength={20}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="handle"
+          placeholderTextColor={color.textMuted}
+          style={inputStyle}
+        />
+        <Text style={{ color: color.textMuted, ...type.micro }}>3–20 characters · letters, numbers, underscore</Text>
+      </View>
+
+      {error ? <Text style={{ color: color.error, ...type.bodysm }}>{error}</Text> : null}
+
+      <Button title={saving ? "Saving…" : "Save changes"} onPress={save} disabled={saving || uploading || !displayName.trim() || handle.length < 3} />
     </ScrollView>
   );
 }

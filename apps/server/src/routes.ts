@@ -4,7 +4,7 @@ import { Users, Streams, Moments, Reactions, Safety, AccountDeletions, type Repo
 import { deriveWallet, issueToken, verifyToken, normalizeAuthId } from "./auth.js";
 import { issueChallenge, verifyClientData, Passkeys } from "./passkey.js";
 import { env, privyConfigured, livekitConfigured, envioConfigured } from "./env.js";
-import { verifyPrivyToken } from "./privy.js";
+import { verifyPrivyToken, syncPrivyProfile } from "./privy.js";
 import { processAccountDeletionJob } from "./accountDeletion.js";
 import { roomTokenFor } from "./livekit.js";
 import { LiveRooms } from "./liveRooms.js";
@@ -214,6 +214,61 @@ export async function registerRoutes(app: FastifyInstance) {
       user: userView(user),
       wallet: { address: user.walletAddress, network: "Monad", onchain: chain.enabled },
     };
+  });
+
+  // Update the caller's editable profile (name / handle / avatar). Writes the DB, then mirrors
+  // to Privy custom metadata (best-effort — DB is the authority the app reads from).
+  app.patch("/me", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const body = (req.body ?? {}) as { displayName?: string; handle?: string; avatarUrl?: string | null };
+
+    let displayName = user.displayName;
+    if (body.displayName !== undefined) {
+      const dn = String(body.displayName).trim();
+      if (dn.length < 1 || dn.length > 40) return reply.code(400).send({ error: "invalid-display-name" });
+      displayName = dn;
+    }
+
+    let handle = user.handle;
+    if (body.handle !== undefined) {
+      const h = String(body.handle).trim().replace(/^@/, "").toLowerCase();
+      if (!/^[a-z0-9_]{3,20}$/.test(h)) return reply.code(400).send({ error: "invalid-handle" });
+      if (h !== user.handle.toLowerCase()) {
+        const existing = await Users.byHandle(h);
+        if (existing && existing.id !== user.id) return reply.code(409).send({ error: "handle-taken" });
+      }
+      handle = h;
+    }
+
+    let avatarUrl = user.avatarUrl;
+    if (body.avatarUrl !== undefined) {
+      if (body.avatarUrl === null || body.avatarUrl === "") {
+        avatarUrl = null;
+      } else {
+        const url = String(body.avatarUrl);
+        // Only accept URLs we host (an object uploaded via /media/post-upload).
+        if (!env.R2_PUBLIC_BASE_URL || !url.startsWith(`${env.R2_PUBLIC_BASE_URL}/`) || url.length > 2048) {
+          return reply.code(400).send({ error: "invalid-avatar-url" });
+        }
+        avatarUrl = url;
+      }
+    }
+
+    await Users.updateProfile(user.id, { displayName, handle, avatarUrl });
+
+    let privySynced = false;
+    if (user.privyId) {
+      try {
+        await syncPrivyProfile(user.privyId, { displayName, handle, avatarUrl });
+        privySynced = true;
+      } catch (error) {
+        req.log.warn({ error }, "privy-profile-sync-failed");
+      }
+    }
+
+    const updated = await Users.byId(user.id);
+    return { user: userView(updated!), privySynced };
   });
 
   // ---------- streams ----------

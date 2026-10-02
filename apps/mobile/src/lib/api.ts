@@ -146,6 +146,8 @@ export const api = {
   privy: (accessToken: string, displayName?: string) =>
     req<{ token: string; user: UserDTO }>("/auth/privy", { method: "POST", body: JSON.stringify({ accessToken, displayName }) }),
   me: () => req<{ user: UserDTO; wallet: { address: string; network: string; onchain: boolean } }>("/me"),
+  updateProfile: (input: { displayName?: string; handle?: string; avatarUrl?: string | null }) =>
+    req<{ user: UserDTO; privySynced: boolean }>("/me", { method: "PATCH", body: JSON.stringify(input) }),
   streams: () => req<{ streams: StreamDTO[] }>("/streams"),
   stream: (id: string, signal?: AbortSignal) => req<{ stream: StreamDTO; sync: SyncDTO; activeMoments: MomentDTO[] }>(`/streams/${id}`, { signal }),
   react: (streamId: string, type: string, clientStreamTimeMs: number, eventId: string, platform: string) =>

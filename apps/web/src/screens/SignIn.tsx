@@ -3,9 +3,10 @@ import { useSession } from "../state/session";
 import { Button, Avatar } from "../components/ui";
 import { ReactionGraph } from "../components/ReactionGraph";
 import { PlusFrame, PlusMark, PlusRule, SectionIndex, TagChip, Hatch, Accordion } from "../components/scaffold";
-import { IconArrowRight, IconCheck, IconSpark, IconFingerprint } from "../components/icons";
+import { IconArrowRight, IconCheck, IconFingerprint } from "../components/icons";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { isPasskeySupported } from "../lib/passkey";
+import heroShowcase from "../assets/hero-showcase.png";
 
 function Logo() {
   return (
@@ -83,30 +84,17 @@ function Hero() {
   );
 }
 
-/** Phone mockup band — placeholders left for real app screenshots. */
+/** Phone showcase band — the real app on three devices. */
 function MockupBand() {
   return (
-    <PlusFrame className="dotgrid overflow-hidden">
-      <div className="flex items-end justify-center gap-4 px-4 py-10 md:gap-8 md:py-16">
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            className={`relative w-[30%] max-w-[240px] shrink-0 border border-border bg-surface1 ${i === 1 ? "translate-y-0" : "translate-y-6 opacity-80"}`}
-            style={{ aspectRatio: "9/19" }}
-          >
-            <div className="absolute left-1/2 top-2 h-1.5 w-16 -translate-x-1/2 rounded-full bg-surface3" />
-            <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
-              <IconSpark size={22} className="text-text-muted" />
-              <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-muted">
-                App preview
-              </span>
-              <span className="font-mono text-micro text-text-disabled">
-                {["Live stream", "Moment detected", "Founding curator"][i]}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
+    <PlusFrame className="overflow-hidden bg-night">
+      <img
+        src={heroShowcase}
+        alt="ENNOIA on iPhone — the social feed, a Moment, and a profile with live earnings."
+        className="block w-full"
+        loading="lazy"
+        decoding="async"
+      />
     </PlusFrame>
   );
 }

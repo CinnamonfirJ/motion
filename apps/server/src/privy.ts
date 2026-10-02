@@ -82,3 +82,21 @@ export async function deletePrivyUser(privyId: string): Promise<void> {
     throw error;
   }
 }
+
+/**
+ * Mirror the app's editable profile fields into Privy custom metadata so Privy stays the
+ * identity source of truth. Best-effort — the caller treats a throw as "DB updated, Privy not".
+ */
+export async function syncPrivyProfile(
+  privyId: string,
+  profile: { displayName: string; handle: string; avatarUrl: string | null }
+): Promise<void> {
+  if (!privyConfigured()) return;
+  await getClient().users().setCustomMetadata(privyId, {
+    custom_metadata: {
+      display_name: profile.displayName,
+      handle: profile.handle,
+      avatar_url: profile.avatarUrl ?? "",
+    },
+  });
+}

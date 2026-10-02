@@ -17,6 +17,7 @@ interface Ctx {
   signInPasskey: () => Promise<void>;
   createPasskey: (displayName: string) => Promise<void>;
   sendTransaction: (transaction: UnsignedTransactionDTO) => Promise<string>;
+  updateProfile: (input: { displayName?: string; handle?: string; avatarUrl?: string | null }) => Promise<{ privySynced: boolean }>;
   logout: () => Promise<void>;
 }
 
@@ -32,11 +33,16 @@ function useAppSession() {
     await realtime.syncClock();
     await flushReactionQueue();
   };
-  return { user, setUser, establish };
+  const updateProfile = async (input: { displayName?: string; handle?: string; avatarUrl?: string | null }) => {
+    const { user: updated, privySynced } = await api.updateProfile(input);
+    setUser(updated);
+    return { privySynced };
+  };
+  return { user, setUser, establish, updateProfile };
 }
 
 function FallbackSessionProvider({ children }: { children: ReactNode }) {
-  const { user, setUser, establish } = useAppSession();
+  const { user, setUser, establish, updateProfile } = useAppSession();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -81,6 +87,7 @@ function FallbackSessionProvider({ children }: { children: ReactNode }) {
       signInPasskey,
       createPasskey,
       sendTransaction: async () => { throw new Error("privy-wallet-required"); },
+      updateProfile,
       logout,
     }}>
       {children}
@@ -89,7 +96,7 @@ function FallbackSessionProvider({ children }: { children: ReactNode }) {
 }
 
 function PrivySessionProvider({ children }: { children: ReactNode }) {
-  const { user, setUser, establish } = useAppSession();
+  const { user, setUser, establish, updateProfile } = useAppSession();
   const [loading, setLoading] = useState(true);
   const privy = usePrivy();
   const embedded = useEmbeddedEthereumWallet();
@@ -168,6 +175,7 @@ function PrivySessionProvider({ children }: { children: ReactNode }) {
       signInPasskey,
       createPasskey,
       sendTransaction,
+      updateProfile,
       logout,
     }}>
       {children}

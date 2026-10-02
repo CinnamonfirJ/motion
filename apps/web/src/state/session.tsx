@@ -14,6 +14,7 @@ interface SessionCtx {
   signInPasskey: () => Promise<void>;
   createPasskey: (displayName: string) => Promise<void>;
   sendTransaction: (transaction: UnsignedTransactionDTO) => Promise<string>;
+  updateProfile: (input: { displayName?: string; handle?: string; avatarUrl?: string | null }) => Promise<{ privySynced: boolean }>;
   logout: () => void | Promise<void>;
 }
 
@@ -29,11 +30,16 @@ function useAppSessionState() {
     await realtime.syncClock();
     await flushReactionQueue();
   };
-  return { user, setUser, establish };
+  const updateProfile = async (input: { displayName?: string; handle?: string; avatarUrl?: string | null }) => {
+    const { user: updated, privySynced } = await api.updateProfile(input);
+    setUser(updated);
+    return { privySynced };
+  };
+  return { user, setUser, establish, updateProfile };
 }
 
 function FallbackSessionProvider({ children }: { children: ReactNode }) {
-  const { user, setUser, establish } = useAppSessionState();
+  const { user, setUser, establish, updateProfile } = useAppSessionState();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -73,12 +79,12 @@ function FallbackSessionProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, loading, authMode: "fallback", login, signInPasskey, createPasskey, sendTransaction: async () => { throw new Error("privy-wallet-required"); }, logout }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ user, loading, authMode: "fallback", login, signInPasskey, createPasskey, sendTransaction: async () => { throw new Error("privy-wallet-required"); }, updateProfile, logout }}>{children}</Ctx.Provider>
   );
 }
 
 function PrivySessionProvider({ children }: { children: ReactNode }) {
-  const { user, setUser, establish } = useAppSessionState();
+  const { user, setUser, establish, updateProfile } = useAppSessionState();
   const [loading, setLoading] = useState(true);
   const privy = usePrivy();
   const loginComplete = useRef<((user: PrivyUser) => void) | null>(null);
@@ -174,7 +180,7 @@ function PrivySessionProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, loading, authMode: "privy", login, signInPasskey, createPasskey, sendTransaction, logout }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ user, loading, authMode: "privy", login, signInPasskey, createPasskey, sendTransaction, updateProfile, logout }}>{children}</Ctx.Provider>
   );
 }
 

@@ -55,6 +55,13 @@ export const Users = {
     const [row] = await db.query<Row>("SELECT * FROM users WHERE privyId = $1", [privyId]);
     return row ? mapUser(row) : null;
   },
+  async byHandle(handle: string): Promise<User | null> {
+    const [row] = await db.query<Row>("SELECT * FROM users WHERE LOWER(handle) = $1", [handle.toLowerCase()]);
+    return row ? mapUser(row) : null;
+  },
+  async updateProfile(id: string, profile: { displayName: string; handle: string; avatarUrl: string | null }): Promise<void> {
+    await db.execute("UPDATE users SET displayName = $1, handle = $2, avatarUrl = $3 WHERE id = $4", [profile.displayName, profile.handle, profile.avatarUrl, id]);
+  },
   async create(input: Omit<User, "id" | "createdAt"> & { id?: string }): Promise<User> {
     const user: User = {
       ...input,
