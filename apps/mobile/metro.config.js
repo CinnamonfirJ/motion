@@ -10,6 +10,22 @@ const workspaceRoot = path.resolve(projectRoot, "../..");
 
 const config = getDefaultConfig(projectRoot);
 config.watchFolders = [workspaceRoot];
+
+// Speed up startup: the mobile app only depends on @ennoia/core, so keep Metro from crawling and
+// watching the other workspaces (server/web/waitlist/contracts/indexer and their node_modules).
+// Cross-platform: escape regex specials, then allow either path separator.
+function dirBlock(rel) {
+  const abs = path.resolve(workspaceRoot, rel);
+  const esc = abs.replace(/[.*+?^${}()|[\]]/g, "\\$&").replace(/[\\/]/g, "[\\\\/]");
+  return new RegExp("^" + esc + "[\\\\/].*");
+}
+config.resolver.blockList = [
+  dirBlock("apps/server"),
+  dirBlock("apps/web"),
+  dirBlock("waitlist"),
+  dirBlock("packages/contracts"),
+  dirBlock("packages/indexer"),
+];
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),
   path.resolve(workspaceRoot, "node_modules"),
