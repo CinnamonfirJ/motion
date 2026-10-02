@@ -169,7 +169,10 @@ function PrivySessionProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     setToken(null);
     setUser(null);
-    await privy.logout();
+    try { await privy.logout(); } catch { /* ignore — we reload to a clean state anyway */ }
+    // Hard reload so the Privy SDK re-initializes from scratch; without this, a passkey login
+    // immediately after logout can hang (its completion callback never fires) → "didn't land".
+    window.location.assign("/");
   };
   const sendTransaction = async (transaction: UnsignedTransactionDTO) => {
     const result = await sendPrivyTransaction(

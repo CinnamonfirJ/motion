@@ -265,10 +265,11 @@ function StartSection() {
       await fn();
     } catch (e: any) {
       const msg = String(e?.message ?? e);
+      console.error("[auth] sign-in failed:", e);
       if (/no-passkey-account/.test(msg)) setError("No passkey on this device yet — create one below.");
       else if (/cancel|NotAllowed/i.test(msg)) setError(cancelMsg);
       else if (/network|fetch|failed|timeout|abort/i.test(msg)) setError("ENNOIA isn't answering. Check your connection and try again in a moment.");
-      else setError("That didn't land — give it a moment and try again.");
+      else setError(`That didn't land — give it a moment and try again. (${msg})`);
     } finally {
       setBusy(null);
     }
