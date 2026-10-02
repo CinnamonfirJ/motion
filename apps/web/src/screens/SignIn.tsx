@@ -246,21 +246,19 @@ function Faq() {
 
 /** The actual auth — passkey-first (biometric), a full section, not a lone input. */
 function StartSection() {
-  const { authMode, login, signInPasskey, createPasskey, sendEmailCode, loginWithEmailCode } = useSession();
+  const { authMode, login, signInPasskey, createPasskey } = useSession();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [codeSent, setCodeSent] = useState(false);
   const [showEmail, setShowEmail] = useState(false);
   const [passkeys, setPasskeys] = useState(authMode === "privy");
-  const [busy, setBusy] = useState<null | "signin" | "create" | "email" | "code">(null);
+  const [busy, setBusy] = useState<null | "signin" | "create" | "email">(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (authMode === "fallback") isPasskeySupported().then(setPasskeys);
   }, [authMode]);
 
-  const run = async (kind: "signin" | "create" | "email" | "code", fn: () => Promise<void>, cancelMsg: string) => {
+  const run = async (kind: "signin" | "create" | "email", fn: () => Promise<void>, cancelMsg: string) => {
     setBusy(kind);
     setError(null);
     try {
@@ -271,7 +269,7 @@ function StartSection() {
       if (/no-passkey-account/.test(msg)) setError("No passkey on this device yet — create one below.");
       else if (/cancel|NotAllowed/i.test(msg)) setError(cancelMsg);
       else if (/network|fetch|failed|timeout|abort/i.test(msg)) setError("ENNOIA isn't answering. Check your connection and try again in a moment.");
-      else setError(`That didn't land — give it a moment and try again. (${msg})`);
+      else setError("That didn't land — give it a moment and try again.");
     } finally {
       setBusy(null);
     }
@@ -329,48 +327,23 @@ function StartSection() {
               </p>
             )}
 
-            <button onClick={() => setShowEmail((v) => !v)} className="self-start font-mono text-micro uppercase tracking-[0.12em] text-text-muted hover:text-text">
+            {authMode === "fallback" && <button onClick={() => setShowEmail((v) => !v)} className="self-start font-mono text-micro uppercase tracking-[0.12em] text-text-muted hover:text-text">
               {showEmail ? "Hide email" : "Use email instead"}
-            </button>
-            {showEmail && (
+            </button>}
+            {authMode === "fallback" && showEmail && (
               <div className="flex flex-col gap-2">
                 <input
                   type="email"
                   inputMode="email"
                   placeholder="you@email.com"
                   value={email}
-                  onChange={(e) => { setEmail(e.target.value); setCodeSent(false); }}
+                  onChange={(e) => setEmail(e.target.value)}
                   aria-label="Email address"
                   className="w-full border border-border bg-surface2 px-4 py-3 font-mono text-body text-text placeholder:text-text-muted"
                 />
-                {authMode === "fallback" ? (
-                  <Button variant="secondary" className="w-full" onClick={() => run("email", () => login(email.trim()), "")} disabled={busy !== null || !email.trim()}>
-                    {busy === "email" ? "Signing in…" : "Continue with email"}
-                  </Button>
-                ) : !codeSent ? (
-                  <Button variant="secondary" className="w-full" onClick={() => run("email", () => sendEmailCode(email.trim()).then(() => setCodeSent(true)), "")} disabled={busy !== null || !email.trim()}>
-                    {busy === "email" ? "Sending code…" : "Email me a code"}
-                  </Button>
-                ) : (
-                  <>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      placeholder="6-digit code"
-                      value={code}
-                      onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      aria-label="Email verification code"
-                      className="w-full border border-border bg-surface2 px-4 py-3 font-mono text-body text-text placeholder:text-text-muted tracking-[0.3em]"
-                    />
-                    <Button variant="primary" className="w-full" onClick={() => run("code", () => loginWithEmailCode(code.trim(), name.trim() || undefined), "")} disabled={busy !== null || code.length < 6}>
-                      {busy === "code" ? "Signing in…" : "Verify & sign in"}
-                    </Button>
-                    <button onClick={() => run("email", () => sendEmailCode(email.trim()).then(() => setCodeSent(true)), "")} disabled={busy !== null} className="self-start font-mono text-micro uppercase tracking-[0.12em] text-text-muted hover:text-text">
-                      Resend code
-                    </button>
-                  </>
-                )}
+                <Button variant="secondary" className="w-full" onClick={() => run("email", () => login(email.trim()), "")} disabled={busy !== null || !email.trim()}>
+                  {busy === "email" ? "Signing in…" : "Continue with email"}
+                </Button>
               </div>
             )}
 

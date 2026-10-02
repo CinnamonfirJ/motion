@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { api, flushReactionQueue, setToken, getToken, type UnsignedTransactionDTO, type UserDTO } from "../lib/api";
 import { realtime } from "../lib/realtime";
 import { registerPasskey, loginPasskey } from "../lib/passkey";
-import { useCreateWallet, useLoginWithEmail, useLoginWithPasskey, usePrivy, useSendTransaction, useSignupWithPasskey, useWallets, type User as PrivyUser } from "@privy-io/react-auth";
+import { useCreateWallet, useLoginWithPasskey, usePrivy, useSendTransaction, useSignupWithPasskey, useWallets, type User as PrivyUser } from "@privy-io/react-auth";
 
 const PRIVY_ENABLED = Boolean(import.meta.env.VITE_PRIVY_APP_ID?.trim());
 
@@ -13,8 +13,6 @@ interface SessionCtx {
   login: (email: string, provider?: string, displayName?: string) => Promise<void>;
   signInPasskey: () => Promise<void>;
   createPasskey: (displayName: string) => Promise<void>;
-  sendEmailCode: (email: string) => Promise<void>;
-  loginWithEmailCode: (code: string, displayName?: string) => Promise<void>;
   sendTransaction: (transaction: UnsignedTransactionDTO) => Promise<string>;
   updateProfile: (input: { displayName?: string; handle?: string; avatarUrl?: string | null }) => Promise<{ privySynced: boolean }>;
   logout: () => void | Promise<void>;
@@ -81,7 +79,7 @@ function FallbackSessionProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, loading, authMode: "fallback", login, signInPasskey, createPasskey, sendEmailCode: async () => { throw new Error("email-code-not-supported-in-fallback"); }, loginWithEmailCode: async () => { throw new Error("email-code-not-supported-in-fallback"); }, sendTransaction: async () => { throw new Error("privy-wallet-required"); }, updateProfile, logout }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ user, loading, authMode: "fallback", login, signInPasskey, createPasskey, sendTransaction: async () => { throw new Error("privy-wallet-required"); }, updateProfile, logout }}>{children}</Ctx.Provider>
   );
 }
 
@@ -94,7 +92,6 @@ function PrivySessionProvider({ children }: { children: ReactNode }) {
   const onComplete = ({ user: completedUser }: { user: PrivyUser }) => loginComplete.current?.(completedUser);
   const { loginWithPasskey } = useLoginWithPasskey({ onComplete });
   const { signupWithPasskey } = useSignupWithPasskey({ onComplete });
-  const { sendCode, loginWithCode } = useLoginWithEmail({ onComplete });
   const { createWallet } = useCreateWallet();
   const { sendTransaction: sendPrivyTransaction } = useSendTransaction();
   const { wallets } = useWallets();
@@ -166,9 +163,6 @@ function PrivySessionProvider({ children }: { children: ReactNode }) {
   };
   const signInPasskey = () => completePasskeyFlow(loginWithPasskey);
   const createPasskey = (displayName: string) => completePasskeyFlow(signupWithPasskey, displayName);
-  // Email OTP — domain-independent, so it works even where a passkey (bound to another domain) can't.
-  const sendEmailCode = async (email: string) => { await sendCode({ email }); };
-  const loginWithEmailCode = (code: string, displayName?: string) => completePasskeyFlow(() => loginWithCode({ code }), displayName);
   const login = async () => {
     throw new Error("Use a Privy passkey to sign in.");
   };
@@ -189,7 +183,7 @@ function PrivySessionProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, loading, authMode: "privy", login, signInPasskey, createPasskey, sendEmailCode, loginWithEmailCode, sendTransaction, updateProfile, logout }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ user, loading, authMode: "privy", login, signInPasskey, createPasskey, sendTransaction, updateProfile, logout }}>{children}</Ctx.Provider>
   );
 }
 
