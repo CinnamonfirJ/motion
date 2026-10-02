@@ -14,7 +14,11 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ennoia.app"
+      "bundleIdentifier": "com.ennoia.app",
+      "associatedDomains": [
+        "webcredentials:www.ennoia.live",
+        "applinks:www.ennoia.live"
+      ]
     },
     "android": {
       "package": "com.ennoia.app",

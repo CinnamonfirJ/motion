@@ -7,6 +7,12 @@
   "rewrites": [
     { "source": "/waitlist", "destination": "https://ennoia-waitlist-zeta.vercel.app/waitlist" },
     { "source": "/waitlist/:path*", "destination": "https://ennoia-waitlist-zeta.vercel.app/waitlist/:path*" },
-    { "source": "/((?!assets/|waitlist).*)", "destination": "/index.html" }
+    { "source": "/((?!assets/|waitlist|.well-known/).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "headers": [{ "key": "Content-Type", "value": "application/json" }]
+    }
   ]
 }

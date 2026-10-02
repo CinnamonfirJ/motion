@@ -1,0 +1,14 @@
+{
+  "webcredentials": {
+    "apps": ["__APPLE_TEAM_ID__.com.ennoia.app"]
+  },
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "__APPLE_TEAM_ID__.com.ennoia.app",
+        "paths": ["*"]
+      }
+    ]
+  }
+}
