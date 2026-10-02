@@ -59,6 +59,12 @@ export const Users = {
     const [row] = await db.query<Row>("SELECT * FROM users WHERE LOWER(handle) = $1", [handle.toLowerCase()]);
     return row ? mapUser(row) : null;
   },
+  async byIds(ids: string[]): Promise<User[]> {
+    const unique = [...new Set(ids)];
+    if (!unique.length) return [];
+    const placeholders = unique.map((_, i) => `$${i + 1}`).join(",");
+    return (await db.query<Row>(`SELECT * FROM users WHERE id IN (${placeholders})`, unique)).map(mapUser);
+  },
   async updateProfile(id: string, profile: { displayName: string; handle: string; avatarUrl: string | null }): Promise<void> {
     await db.execute("UPDATE users SET displayName = $1, handle = $2, avatarUrl = $3 WHERE id = $4", [profile.displayName, profile.handle, profile.avatarUrl, id]);
   },
@@ -203,6 +209,12 @@ export const Streams = {
   async byId(id: string): Promise<Stream | null> {
     const [row] = await db.query<Row>("SELECT * FROM streams WHERE id = $1", [id]);
     return row ? mapStream(row) : null;
+  },
+  async byIds(ids: string[]): Promise<Stream[]> {
+    const unique = [...new Set(ids)];
+    if (!unique.length) return [];
+    const placeholders = unique.map((_, i) => `$${i + 1}`).join(",");
+    return (await db.query<Row>(`SELECT * FROM streams WHERE id IN (${placeholders})`, unique)).map(mapStream);
   },
   async recording(id: string): Promise<StreamRecording | null> {
     const [row] = await db.query<Row>("SELECT egressId, recordingPrefix, recordingStartedAt, endedAt FROM streams WHERE id = $1", [id]);
@@ -376,6 +388,13 @@ export const Moments = {
     const [row] = await db.query<Row>("SELECT COUNT(*) AS count FROM moment_views WHERE momentId = $1", [momentId]);
     return Number(value(row ?? {}, "count") ?? 0);
   },
+  async viewCountsFor(ids: string[]): Promise<Map<string, number>> {
+    const unique = [...new Set(ids)];
+    if (!unique.length) return new Map();
+    const placeholders = unique.map((_, i) => `$${i + 1}`).join(",");
+    const rows = await db.query<Row>(`SELECT momentId, COUNT(*) AS count FROM moment_views WHERE momentId IN (${placeholders}) GROUP BY momentId`, unique);
+    return new Map(rows.map((row) => [String(value(row, "momentId")), Number(value(row, "count") ?? 0)]));
+  },
   async reputationFor(userId: string): Promise<number> {
     const [row] = await db.query<Row>("SELECT COUNT(*) AS count FROM founding_curators WHERE userId = $1", [userId]);
     return Number(value(row ?? {}, "count") ?? 0);
@@ -431,29 +450,45 @@ function mapCurator(row: Row): FoundingCurator {
   };
 }
 
-export async function hydrateMoment(row: Row): Promise<Moment> {
-  const clip = JSON.parse(String(value(row, "clip"))) as Clip;
-  const metrics = JSON.parse(String(value(row, "metrics"))) as MomentMetrics;
-  const id = String(value(row, "id"));
+function buildMoment(row: Row, foundingCurators: FoundingCurator[]): Moment {
   return {
-    id,
+    id: String(value(row, "id")),
     streamId: String(value(row, "streamId")),
     creatorId: String(value(row, "creatorId")),
     state: String(value(row, "state")) as MomentState,
     spikeStreamTimeMs: number(row, "spikeStreamTimeMs"),
     detectedAt: number(row, "detectedAt"),
     confirmedAt: value(row, "confirmedAt") == null ? null : number(row, "confirmedAt"),
-    clip,
-    metrics,
-    foundingCurators: await Moments.curatorsFor(id),
+    clip: JSON.parse(String(value(row, "clip"))) as Clip,
+    metrics: JSON.parse(String(value(row, "metrics"))) as MomentMetrics,
+    foundingCurators,
     settlement: parseSettlement(value(row, "settlement") ? String(value(row, "settlement")) : null),
     createdAt: number(row, "createdAt"),
     updatedAt: number(row, "updatedAt"),
   };
 }
 
+export async function hydrateMoment(row: Row): Promise<Moment> {
+  return buildMoment(row, await Moments.curatorsFor(String(value(row, "id"))));
+}
+
+// Batch the founding-curator load for a list of moments into ONE query (was one per moment).
 async function hydrateMoments(rows: Row[]): Promise<Moment[]> {
-  return Promise.all(rows.map(hydrateMoment));
+  if (!rows.length) return [];
+  const ids = rows.map((row) => String(value(row, "id")));
+  const placeholders = ids.map((_, i) => `$${i + 1}`).join(",");
+  const curatorRows = await db.query<Row>(
+    `SELECT * FROM founding_curators WHERE momentId IN (${placeholders}) ORDER BY rank ASC`,
+    ids
+  );
+  const byMoment = new Map<string, FoundingCurator[]>();
+  for (const row of curatorRows) {
+    const mid = String(value(row, "momentId"));
+    const list = byMoment.get(mid) ?? [];
+    list.push(mapCurator(row));
+    byMoment.set(mid, list);
+  }
+  return rows.map((row) => buildMoment(row, byMoment.get(String(value(row, "id"))) ?? []));
 }
 
 export const Batches = {

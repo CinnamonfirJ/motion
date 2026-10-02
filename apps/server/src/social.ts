@@ -6,7 +6,7 @@ import { createHmac } from "node:crypto";
 import { db } from "./db.js";
 import { env } from "./env.js";
 import { Moments, Streams, Users } from "./store.js";
-import { momentView, streamView } from "./view.js";
+import { momentViews, streamView } from "./view.js";
 import { hub } from "./realtime.js";
 
 type Auth = (request: FastifyRequest) => Promise<User | null>;
@@ -358,10 +358,16 @@ export async function registerSocialRoutes(app: FastifyInstance, auth: Auth) {
         Streams.live().then((streams) => streams.filter((stream) => eligible(stream.creatorId)).slice(0, 10)),
         Moments.publicFeed(12).then((moments) => moments.filter((moment) => eligible(moment.creatorId))),
       ]);
-      const [streamItems, momentItems] = await Promise.all([
+      const [streamItems, momentViewsList] = await Promise.all([
         Promise.all(live.map(async (stream) => ({ type: "stream" as const, createdAt: stream.startedAt, score: 18, stream: await streamView(stream, hub.viewerCount(stream.id)) }))),
-        Promise.all(publicMoments.map(async (moment) => ({ type: "moment" as const, createdAt: moment.confirmedAt ?? moment.createdAt, score: 12 / Math.pow(1 + (Date.now() - (moment.confirmedAt ?? moment.createdAt)) / 3_600_000, 0.8), moment: await momentView(moment) }))),
+        momentViews(publicMoments),
       ]);
+      const momentItems = momentViewsList.map((moment, i) => ({
+        type: "moment" as const,
+        createdAt: publicMoments[i]!.confirmedAt ?? publicMoments[i]!.createdAt,
+        score: 12 / Math.pow(1 + (Date.now() - (publicMoments[i]!.confirmedAt ?? publicMoments[i]!.createdAt)) / 3_600_000, 0.8),
+        moment,
+      }));
       items.push(...streamItems, ...momentItems);
     }
     if (mode === "for-you" && !communityId) items.sort((a, b) => b.score - a.score || b.createdAt - a.createdAt);

@@ -42,8 +42,8 @@ export async function streamView(s: Stream, viewerCount: number) {
   };
 }
 
-async function curatorView(c: FoundingCurator) {
-  const u = await Users.byId(c.userId);
+function curatorView(c: FoundingCurator, userById: Map<string, User>) {
+  const u = userById.get(c.userId);
   return {
     userId: c.userId,
     rank: c.rank,
@@ -73,13 +73,8 @@ function settlementView(s: Settlement | null) {
   };
 }
 
-export async function momentView(m: Moment) {
-  const [stream, creator, views, foundingCurators] = await Promise.all([
-    Streams.byId(m.streamId),
-    Users.byId(m.creatorId),
-    Moments.viewsFor(m.id),
-    Promise.all(m.foundingCurators.map(curatorView)),
-  ]);
+function buildMomentView(m: Moment, stream: Stream | null, userById: Map<string, User>, views: number) {
+  const creator = userById.get(m.creatorId) ?? null;
   return {
     id: m.id,
     streamId: m.streamId,
@@ -94,7 +89,7 @@ export async function momentView(m: Moment) {
     creator: creator ? { id: creator.id, displayName: creator.displayName, handle: creator.handle, avatarUrl: creator.avatarUrl } : null,
     streamTitle: stream?.title ?? "",
     views,
-    foundingCurators,
+    foundingCurators: m.foundingCurators.map((c) => curatorView(c, userById)),
     foundingCuratorCount: m.foundingCurators.length,
     settlement: settlementView(m.settlement),
     // On-chain identity of this Moment (createMoment/MomentCreated key) — used to cross-reference
@@ -105,4 +100,27 @@ export async function momentView(m: Moment) {
   };
 }
 
-export type MomentDTO = Awaited<ReturnType<typeof momentView>>;
+/**
+ * Batched view for a LIST of moments: loads every referenced stream, user (creators + curators)
+ * and view count in 3 queries total, instead of ~7 queries per moment. Use this anywhere a feed
+ * maps over moments; `momentView` (single) delegates here.
+ */
+export async function momentViews(moments: Moment[]): Promise<MomentDTO[]> {
+  if (!moments.length) return [];
+  const streamIds = moments.map((m) => m.streamId);
+  const userIds = moments.flatMap((m) => [m.creatorId, ...m.foundingCurators.map((c) => c.userId)]);
+  const [streams, users, viewCounts] = await Promise.all([
+    Streams.byIds(streamIds),
+    Users.byIds(userIds),
+    Moments.viewCountsFor(moments.map((m) => m.id)),
+  ]);
+  const streamById = new Map(streams.map((s) => [s.id, s]));
+  const userById = new Map(users.map((u) => [u.id, u]));
+  return moments.map((m) => buildMomentView(m, streamById.get(m.streamId) ?? null, userById, viewCounts.get(m.id) ?? 0));
+}
+
+export async function momentView(m: Moment): Promise<MomentDTO> {
+  return (await momentViews([m]))[0]!;
+}
+
+export type MomentDTO = ReturnType<typeof buildMomentView>;

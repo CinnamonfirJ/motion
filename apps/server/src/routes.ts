@@ -16,7 +16,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { ingestReaction, config, demoFastForwardSettlement } from "./momentEngine.js";
 import { demoCrowd, demoForceSpike, demoResetStream } from "./seed.js";
 import { hub } from "./realtime.js";
-import { momentView, streamView, userView, usd } from "./view.js";
+import { momentView, momentViews, streamView, userView, usd } from "./view.js";
 import { getChain, momentIdHash, toBytes32 } from "./chain.js";
 import { streamTimeMs } from "@ennoia/core";
 import { permanentMediaConfigured, startStreamRecording, stopStreamRecording } from "./media.js";
@@ -297,7 +297,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const stream = await Streams.byId(id);
     if (!stream) return reply.code(404).send({ error: "not found" });
-    const active = await Promise.all((await Moments.activeForStream(id)).map(momentView));
+    const active = await momentViews(await Moments.activeForStream(id));
     const now = Date.now();
     return {
       stream: await streamView(stream, hub.viewerCount(id)),
@@ -318,7 +318,7 @@ export async function registerRoutes(app: FastifyInstance) {
   app.get("/streams/:id/moments", async (req) => {
     const { id } = req.params as { id: string };
     const active = await Moments.activeForStream(id);
-    return { active: await Promise.all(active.map(momentView)) };
+    return { active: await momentViews(active) };
   });
 
   // ---------- livestream (LiveKit) ----------
@@ -699,7 +699,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const user = await bearer(req);
     const blocked = new Set(user ? await Safety.blockedIds(user.id) : []);
     const moments = (await Moments.publicFeed(50)).filter((moment) => !blocked.has(moment.creatorId));
-    return { moments: await Promise.all(moments.map(momentView)) };
+    return { moments: await momentViews(moments) };
   });
 
   app.get("/moments/:id", async (req, reply) => {
@@ -786,7 +786,7 @@ export async function registerRoutes(app: FastifyInstance) {
       }));
       return { source: "envio", moments };
     }
-    return { source: "local", moments: await Promise.all((await Moments.publicFeed(30)).map(momentView)) };
+    return { source: "local", moments: await momentViews(await Moments.publicFeed(30)) };
   });
 
   app.get("/leaderboard", async () => {
