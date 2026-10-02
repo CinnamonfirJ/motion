@@ -34,10 +34,17 @@ export function PostComposer({ user, communityId, streams, moments, onPublished 
     try {
       for (let index = ids.length; index < files.length; index++) {
         const file = files[index]!;
-        const signed = await api.uploadPostMedia(file.type, file.size);
-        const upload = await fetch(signed.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
-        if (!upload.ok) throw new Error(`Upload failed (${upload.status}). Check R2 CORS and retry.`);
-        ids.push(signed.uploadId);
+        if (file.type.startsWith("image/")) {
+          // Images relay through our API → R2 (no browser CORS needed).
+          const { uploadId } = await api.uploadImageDirect(file);
+          ids.push(uploadId);
+        } else {
+          // Videos stream straight to R2 via a presigned PUT (needs R2 CORS).
+          const signed = await api.uploadPostMedia(file.type, file.size);
+          const upload = await fetch(signed.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+          if (!upload.ok) throw new Error(`Upload failed (${upload.status}). Check R2 CORS and retry.`);
+          ids.push(signed.uploadId);
+        }
         setUploadedIds([...ids]);
       }
       await api.createPost({

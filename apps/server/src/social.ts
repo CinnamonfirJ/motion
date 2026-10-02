@@ -133,6 +133,33 @@ export async function registerSocialRoutes(app: FastifyInstance, auth: Auth) {
     return { uploadId: id, uploadUrl, publicUrl: mediaUrl(key), contentType: body.contentType, expiresInSec: 300 };
   });
 
+  // Server-side image upload: the client POSTs the raw image bytes here and we upload to R2 with
+  // our own credentials, so the browser never makes a cross-origin PUT (no R2 CORS needed). The
+  // row it writes is identical to the presigned flow's, so POST /posts accepts the returned uploadId
+  // unchanged. Images only (the binary parser caps the body at 16MB); videos use /media/post-upload.
+  app.post("/media/post-upload-direct", { bodyLimit: 16_000_000 }, async (req, reply) => {
+    const user = await auth(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    if (!s3 || !env.R2_BUCKET || !env.R2_PUBLIC_BASE_URL) return reply.code(503).send({ error: "media-not-configured" });
+    const contentType = String(req.headers["content-type"] ?? "").split(";")[0]!.trim();
+    const spec = mediaTypes.get(contentType);
+    if (!spec || (spec.ext !== "jpg" && spec.ext !== "png" && spec.ext !== "webp")) {
+      return reply.code(400).send({ error: "invalid-media-type (images only)" });
+    }
+    const bytes = req.body as unknown;
+    if (!Buffer.isBuffer(bytes) || bytes.length < 1 || bytes.length > spec.max) {
+      return reply.code(400).send({ error: "invalid-media-size" });
+    }
+    const id = newId("upl");
+    const key = `posts/${user.id}/${id}.${spec.ext}`;
+    await s3.send(new PutObjectCommand({ Bucket: env.R2_BUCKET, Key: key, Body: bytes, ContentType: contentType }));
+    await db.execute(
+      "INSERT INTO post_uploads (id, ownerId, objectKey, contentType, maxBytes, createdAt) VALUES ($1,$2,$3,$4,$5,$6)",
+      [id, user.id, key, contentType, bytes.length, Date.now()]
+    );
+    return reply.code(201).send({ uploadId: id, publicUrl: mediaUrl(key), contentType });
+  });
+
   app.post("/posts", async (req, reply) => {
     const user = await auth(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });

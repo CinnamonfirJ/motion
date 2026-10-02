@@ -57,6 +57,14 @@ async function main() {
   // LiveKit signs the exact raw body. Never accept an unsigned client claim of host presence.
   app.addContentTypeParser("application/webhook+json", { parseAs: "string" }, (_req, body, done) => done(null, body));
 
+  // Raw image bytes for the server-side upload proxy (POST /media/post-upload-direct), so browsers
+  // never need R2 CORS. Images only + 16MB cap — large videos stay on the presigned direct path.
+  app.addContentTypeParser(
+    ["image/jpeg", "image/png", "image/webp"],
+    { parseAs: "buffer", bodyLimit: 16_000_000 },
+    (_req, body, done) => done(null, body)
+  );
+
   await migrateDatabase();
   if (!(await databaseReady())) throw new Error("Database readiness check failed after migration.");
 

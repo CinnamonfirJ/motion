@@ -306,6 +306,19 @@ export const api = {
     req<{ post: PostDTO }>("/posts", { method: "POST", body: JSON.stringify(input) }),
   uploadPostMedia: (contentType: string, sizeBytes: number) =>
     req<{ uploadId: string; uploadUrl: string; publicUrl: string; contentType: string }>("/media/post-upload", { method: "POST", body: JSON.stringify({ contentType, sizeBytes }) }),
+  // Server-side image upload (no R2 CORS needed): POST the raw bytes, server relays to R2.
+  uploadImageDirect: async (file: File): Promise<{ uploadId: string; publicUrl: string; contentType: string }> => {
+    const res = await fetch(`${API}/media/post-upload-direct`, {
+      method: "POST",
+      headers: { "Content-Type": file.type, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: file,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, (body as any).error || res.statusText);
+    }
+    return res.json();
+  },
   viewPost: (id: string) => req<{ ok: boolean }>(`/posts/${id}/view`, { method: "POST", body: "{}" }),
   likePost: (id: string) => req<{ ok: boolean }>(`/posts/${id}/like`, { method: "PUT", body: "{}" }),
   unlikePost: (id: string) => req<{ ok: boolean }>(`/posts/${id}/like`, { method: "DELETE" }),

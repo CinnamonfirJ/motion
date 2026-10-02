@@ -121,12 +121,10 @@ function EditProfile({ onClose }: { onClose: () => void }) {
     if (file.size > 15_000_000) return setError("Image must be under 15 MB.");
     setUploading(true);
     try {
-      const { uploadUrl, publicUrl } = await api.uploadPostMedia(file.type, file.size);
-      const put = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-      if (!put.ok) throw new Error("upload-failed");
+      const { publicUrl } = await api.uploadImageDirect(file);
       setAvatarUrl(publicUrl);
     } catch {
-      setError("Image upload failed. (If this persists, R2 CORS may need to allow this site.)");
+      setError("Image upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
