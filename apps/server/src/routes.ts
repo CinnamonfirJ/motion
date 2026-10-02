@@ -21,7 +21,7 @@ import { getChain, momentIdHash, toBytes32 } from "./chain.js";
 import { streamTimeMs } from "@ennoia/core";
 import { permanentMediaConfigured, startStreamRecording, stopStreamRecording } from "./media.js";
 import { registerSocialRoutes } from "./social.js";
-import { seedDemo } from "./demoSeed.js";
+import { seedDemo, clearDemoData } from "./demoSeed.js";
 
 async function bearer(req: FastifyRequest): Promise<User | null> {
   const h = req.headers.authorization;
@@ -892,11 +892,12 @@ export async function registerRoutes(app: FastifyInstance) {
   // demo data — moments, earnings, posts, followers, a cast of accounts — to the account whose
   // @handle you pass (the one you signed into the app with). Safe to re-run: it resets first.
   app.post("/admin/seed-demo", async (req, reply) => {
-    const body = (req.body ?? {}) as { handle?: string; secret?: string; reset?: boolean };
+    const body = (req.body ?? {}) as { handle?: string; secret?: string; reset?: boolean; clearOnly?: boolean };
     const provided = (req.headers["x-seed-secret"] as string | undefined) ?? body.secret;
     if (!env.DEMO_SEED_SECRET || provided !== env.DEMO_SEED_SECRET) return reply.code(403).send({ error: "forbidden" });
-    if (!body.handle) return reply.code(400).send({ error: "handle-required" });
     try {
+      if (body.clearOnly) return { cleared: true, ...(await clearDemoData()) };
+      if (!body.handle) return reply.code(400).send({ error: "handle-required" });
       return await seedDemo({ targetHandle: body.handle, reset: body.reset !== false });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import {
   DEFAULT_CONFIG,
   distributeReward,
@@ -180,14 +180,34 @@ async function bulkInsert(table: string, columns: string[], rows: Cell[][]): Pro
 // ---------------------------------------------------------------- reset ----
 
 async function clearDemo(): Promise<void> {
-  // FK-safe order: posts reference moments/streams (RESTRICT), so posts go before them;
-  // cast users go last (follows/reactions/curators cascade from users on delete).
-  await db.execute("DELETE FROM reactions WHERE eventId LIKE 'demo\\_%' ESCAPE '\\'");
-  await db.execute("DELETE FROM reactions WHERE streamId LIKE 'demo\\_%' ESCAPE '\\'");
-  await db.execute("DELETE FROM posts WHERE id LIKE 'demo\\_%' ESCAPE '\\'");
-  await db.execute("DELETE FROM moments WHERE id LIKE 'demo\\_%' ESCAPE '\\'");
-  await db.execute("DELETE FROM streams WHERE id LIKE 'demo\\_%' ESCAPE '\\'");
-  await db.execute(`DELETE FROM users WHERE authId LIKE '${CAST_AUTH_PREFIX}%'`);
+  await clearDemoData();
+}
+
+/**
+ * Remove every tagged demo fixture (reactions, posts, moments + their founding curators/views,
+ * streams, cast users and their follows/likes) plus the demo R2 images. Returns row counts.
+ * FK-safe order: posts reference moments/streams (RESTRICT) so posts go first; cast users go
+ * last (follows/reactions/curators cascade from users on delete).
+ */
+export async function clearDemoData(): Promise<Record<string, number>> {
+  const reactions =
+    (await db.execute("DELETE FROM reactions WHERE eventId LIKE 'demo\\_%' ESCAPE '\\'")) +
+    (await db.execute("DELETE FROM reactions WHERE streamId LIKE 'demo\\_%' ESCAPE '\\'"));
+  const posts = await db.execute("DELETE FROM posts WHERE id LIKE 'demo\\_%' ESCAPE '\\'");
+  const moments = await db.execute("DELETE FROM moments WHERE id LIKE 'demo\\_%' ESCAPE '\\'");
+  const streams = await db.execute("DELETE FROM streams WHERE id LIKE 'demo\\_%' ESCAPE '\\'");
+  const castUsers = await db.execute(`DELETE FROM users WHERE authId LIKE '${CAST_AUTH_PREFIX}%'`);
+
+  // Best-effort: delete the committed demo images from R2 (keys are deterministic).
+  if (r2Configured()) {
+    const s3 = s3Client();
+    const keys = [
+      ...Array.from({ length: 16 }, (_, i) => `demo/posts/post-${String(i + 1).padStart(2, "0")}.jpg`),
+      ...Array.from({ length: 5 }, (_, i) => `demo/streams/stream-${String(i + 1).padStart(2, "0")}.jpg`),
+    ];
+    await Promise.all(keys.map((Key) => s3.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET, Key })).catch(() => undefined)));
+  }
+  return { reactions, posts, moments, streams, castUsers };
 }
 
 // ------------------------------------------------------------- builders ----
