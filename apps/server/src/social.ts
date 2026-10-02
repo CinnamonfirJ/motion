@@ -25,7 +25,7 @@ const mediaTypes = new Map([
 const s3 = env.R2_ENDPOINT && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY
   ? new S3Client({
       endpoint: env.R2_ENDPOINT,
-      region: "auto",
+      region: env.R2_REGION,
       forcePathStyle: true,
       credentials: { accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY },
       // R2 doesn't support the AWS SDK v3 default flexible checksums, which otherwise inject an

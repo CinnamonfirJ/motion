@@ -9,7 +9,8 @@
     "deploy:monad": "hardhat run scripts/deploy.ts --network monadTestnet",
     "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
     "node": "hardhat node",
-    "fund": "hardhat run scripts/fund.ts --network monadTestnet"
+    "fund": "hardhat run scripts/fund.ts --network monadTestnet",
+    "set-settler": "hardhat run scripts/set-settler.ts --network monadTestnet"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",

@@ -1,7 +1,7 @@
 {
   "network": "monadTestnet",
-  "address": "0xF5dBf042aaDb38e4519D2B972C0a4f16C22a20EA",
-  "deployer": "0x3288e87083D9e2Af728864C308a23fee16497132",
+  "address": "0xCb3cEcEE0F869C3162EB327186de851C621F4C81",
+  "deployer": "0x1aF32cD3b767aA2b9c61f70918b3BBAc247C3ae0",
   "abi": [
     {
       "type": "constructor",
@@ -707,5 +707,5 @@
       "stateMutability": "payable"
     }
   ],
-  "deployedAt": "2026-09-23T13:55:49.861Z"
+  "deployedAt": "2026-10-02T14:38:40.392Z"
 }

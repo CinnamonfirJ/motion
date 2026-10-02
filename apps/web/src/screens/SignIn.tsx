@@ -267,7 +267,10 @@ function StartSection() {
       const msg = String(e?.message ?? e);
       console.error("[auth] sign-in failed:", e);
       if (/no-passkey-account/.test(msg)) setError("No passkey on this device yet — create one below.");
-      else if (/cancel|NotAllowed/i.test(msg)) setError(cancelMsg);
+      // WebAuthn reports cancel / timeout / "no passkey for this site" all as a NotAllowedError
+      // DOMException, whose message ("The operation either timed out or was not allowed") lacks the name.
+      else if (e?.name === "NotAllowedError" || /cancel|NotAllowed|timed out or was not allowed/i.test(msg))
+        setError(kind === "signin" ? `${cancelMsg} No passkey for ENNOIA on this device? Create one below.` : cancelMsg);
       else if (/network|fetch|failed|timeout|abort/i.test(msg)) setError("ENNOIA isn't answering. Check your connection and try again in a moment.");
       else setError("That didn't land — give it a moment and try again.");
     } finally {

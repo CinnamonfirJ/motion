@@ -78,7 +78,12 @@ export const env = {
   LIVEKIT_EGRESS_REGION: process.env.LIVEKIT_EGRESS_REGION ?? "",
 
   /** Cloudflare R2 (S3-compatible) — recordings and permanent Moment clips. */
+  /** Testing only (ignored in production): lowers the unique-reactor minimum for spike detection
+   *  and confirmation so a small team can trigger a real Moment. 0/blank = PRD defaults (4). */
+  MOMENT_MIN_REACTORS: Number(process.env.MOMENT_MIN_REACTORS || 0),
   R2_ENDPOINT: process.env.R2_ENDPOINT ?? "",
+  /** S3 signing region. "auto" for R2; other S3-compatible stores (e.g. Supabase) need their real region. */
+  R2_REGION: process.env.R2_REGION || "auto",
   R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID ?? "",
   R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY ?? "",
   R2_BUCKET: process.env.R2_BUCKET ?? "",

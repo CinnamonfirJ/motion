@@ -72,7 +72,7 @@ export async function settleMoment(
   const contract = chain.contract as any;
   try {
     // Reconcile if already settled on-chain (a prior attempt succeeded but we lost the receipt).
-    const already: boolean = await contract.isMomentSettled(idHash);
+    const already: boolean = await withRpcRetry("isMomentSettled", () => contract.isMomentSettled(idHash));
     if (already) {
       return {
         settlement: { ...base, status: "confirmed", confirmedAt: Date.now(), error: null },
@@ -82,17 +82,23 @@ export async function settleMoment(
     }
 
     const platformAddress = env.PLATFORM_ADDRESS || (await (chain.contract as any).runner?.getAddress?.()) || creatorWalletAddress;
-    const tx = await contract.settleMoment(
-      idHash,
-      creatorWalletAddress,
-      dist.creatorUnits,
-      platformAddress,
-      dist.platformUnits,
-      curatorAddresses,
-      curatorAmounts
+    // Resending after a transient failure is safe: the contract reverts AlreadySettled.
+    const tx: ethers.ContractTransactionResponse = await withRpcRetry("settleMoment", () =>
+      contract.settleMoment(
+        idHash,
+        creatorWalletAddress,
+        dist.creatorUnits,
+        platformAddress,
+        dist.platformUnits,
+        curatorAddresses,
+        curatorAmounts
+      )
     );
+    console.log(`[settlement] ${moment.id} submitted tx=${tx.hash}`);
     const submitted: Settlement = { ...base, status: "submitted", txHash: tx.hash, submittedAt: Date.now() };
-    const receipt = await tx.wait(1);
+    // Once broadcast, only retry waiting on the known hash — never resend.
+    const receipt = await withRpcRetry("waitForReceipt", () => chain.provider!.waitForTransaction(tx.hash, 1, 60_000));
+    console.log(`[settlement] ${moment.id} receipt status=${receipt?.status} tx=${tx.hash}`);
     return {
       settlement: {
         ...submitted,
@@ -118,6 +124,28 @@ export async function settleMoment(
       curators: curatorsWithReward,
       simulated: false,
     };
+  }
+}
+
+/** Transient Monad RPC failures worth retrying. Reverts (AlreadySettled, InsufficientPool) are not. */
+function isTransientRpcError(err: any): boolean {
+  const code = err?.code;
+  if (code === "NETWORK_ERROR" || code === "TIMEOUT" || code === "SERVER_ERROR" || code === "UNKNOWN_ERROR") return true;
+  const msg = String(err?.shortMessage ?? err?.message ?? err);
+  return /ECONNRESET|ECONNREFUSED|ETIMEDOUT|fetch failed|socket hang up|429|rate limit|timeout|nonce too low|replacement/i.test(msg);
+}
+
+/** Exponential backoff (1s, 2s, 4s) for transient RPC errors; rethrows anything else immediately. */
+async function withRpcRetry<T>(label: string, fn: () => Promise<T>, attempts = 4): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      if (i >= attempts || !isTransientRpcError(err)) throw err;
+      const delayMs = 1000 * 2 ** (i - 1);
+      console.warn(`[settlement] ${label} failed (attempt ${i}/${attempts}), retrying in ${delayMs}ms:`, err?.shortMessage ?? err?.message ?? err);
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
   }
 }
 

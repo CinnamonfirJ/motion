@@ -10,7 +10,7 @@ field_selection:
   transaction_fields:
     - hash
 
-# Monad testnet (chain id 10143), MomentRewards deployed at block 65,032,013.
+# Monad testnet (chain id 10143), MomentRewards deployed at block 67,569,016.
 contracts:
   - name: MomentRewards
     handler: ./src/EventHandlers.ts
@@ -24,10 +24,10 @@ contracts:
       - event: ReactionBatchCommitted(bytes32 indexed batchId, bytes32 indexed streamId, uint256 reactionCount, uint64 fromTs, uint64 toTs, bytes32 commitment)
 chains:
   - id: 10143
-    start_block: 65032013
+    start_block: 67569016
     # Use RPC when HyperSync is unavailable for this chain.
     rpc: ${ENVIO_MONAD_RPC_URL:-https://testnet-rpc.monad.xyz}
     contracts:
       - name: MomentRewards
         address:
-          - "${ENVIO_MOMENT_REWARDS_ADDRESS:-0xF5dBf042aaDb38e4519D2B972C0a4f16C22a20EA}"
+          - "${ENVIO_MOMENT_REWARDS_ADDRESS:-0xCb3cEcEE0F869C3162EB327186de851C621F4C81}"
