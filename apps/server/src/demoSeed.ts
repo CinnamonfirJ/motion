@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import {
   DEFAULT_CONFIG,
   distributeReward,
@@ -20,7 +20,6 @@ import {
 import { db } from "./db.js";
 import { env } from "./env.js";
 import { deriveWallet } from "./auth.js";
-import { Moments } from "./store.js";
 
 /**
  * Demo content seeder (screenshot fixtures) — isolated from product logic.
@@ -123,16 +122,6 @@ function s3Client(): S3Client {
   });
 }
 
-/** Upload one local asset to a stable demo key (idempotent — skips if already present). */
-async function uploadAsset(s3: S3Client, localRelPath: string, key: string): Promise<string> {
-  const exists = await s3.send(new HeadObjectCommand({ Bucket: env.R2_BUCKET, Key: key })).then(() => true).catch(() => false);
-  if (!exists) {
-    const body = readFileSync(resolve(ASSETS, localRelPath));
-    await s3.send(new PutObjectCommand({ Bucket: env.R2_BUCKET, Key: key, Body: body, ContentType: "image/jpeg" }));
-  }
-  return mediaUrl(key);
-}
-
 function r2Configured(): boolean {
   return Boolean(env.R2_ENDPOINT && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY && env.R2_BUCKET && env.R2_PUBLIC_BASE_URL);
 }
@@ -148,17 +137,44 @@ async function uploadImages(): Promise<{ posts: string[]; streams: string[] }> {
     };
   }
   const s3 = s3Client();
-  const posts: string[] = [];
-  for (let i = 1; i <= 16; i++) {
-    const n = String(i).padStart(2, "0");
-    posts.push(await uploadAsset(s3, `posts/post-${n}.jpg`, `demo/posts/post-${n}.jpg`));
+  // Upload in parallel (overwrite — idempotent, no HeadObject round-trip) to keep the whole
+  // seed well under the request timeout.
+  const spec = [
+    ...Array.from({ length: 16 }, (_, i) => ({ kind: "posts", n: String(i + 1).padStart(2, "0") })),
+    ...Array.from({ length: 5 }, (_, i) => ({ kind: "streams", n: String(i + 1).padStart(2, "0") })),
+  ];
+  await Promise.all(
+    spec.map(({ kind, n }) =>
+      s3.send(new PutObjectCommand({
+        Bucket: env.R2_BUCKET,
+        Key: `demo/${kind}/${kind === "posts" ? "post" : "stream"}-${n}.jpg`,
+        Body: readFileSync(resolve(ASSETS, `${kind}/${kind === "posts" ? "post" : "stream"}-${n}.jpg`)),
+        ContentType: "image/jpeg",
+      }))
+    )
+  );
+  return {
+    posts: Array.from({ length: 16 }, (_, i) => mediaUrl(`demo/posts/post-${String(i + 1).padStart(2, "0")}.jpg`)),
+    streams: Array.from({ length: 5 }, (_, i) => mediaUrl(`demo/streams/stream-${String(i + 1).padStart(2, "0")}.jpg`)),
+  };
+}
+
+type Cell = string | number | boolean | null;
+
+/** One INSERT per chunk of rows (chunked so param count stays safe for sqlite too). */
+async function bulkInsert(table: string, columns: string[], rows: Cell[][]): Promise<void> {
+  if (!rows.length) return;
+  const perRow = columns.length;
+  const chunkSize = Math.max(1, Math.floor(900 / perRow));
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    const params: Cell[] = [];
+    const tuples = chunk.map((row, r) => {
+      params.push(...row);
+      return `(${columns.map((_, c) => `$${r * perRow + c + 1}`).join(",")})`;
+    });
+    await db.execute(`INSERT INTO ${table} (${columns.join(",")}) VALUES ${tuples.join(",")} ON CONFLICT DO NOTHING`, params);
   }
-  const streams: string[] = [];
-  for (let i = 1; i <= 5; i++) {
-    const n = String(i).padStart(2, "0");
-    streams.push(await uploadAsset(s3, `streams/stream-${n}.jpg`, `demo/streams/stream-${n}.jpg`));
-  }
-  return { posts, streams };
 }
 
 // ---------------------------------------------------------------- reset ----
@@ -212,6 +228,16 @@ interface SeededMoment {
   moment: Moment;
   curators: FoundingCurator[];
   viewers: string[];
+}
+
+/** Serialize a settlement the same way store.ts does (bigint units → strings). */
+function serializeSettlement(s: Settlement): string {
+  return JSON.stringify({
+    ...s,
+    creatorAmountUnits: s.creatorAmountUnits.toString(),
+    curatorPoolUnits: s.curatorPoolUnits.toString(),
+    totalUnits: s.totalUnits.toString(),
+  });
 }
 
 /** Build one SETTLED moment with a real reward split; `curatorUsers[0]` is rank #1. */
@@ -281,7 +307,19 @@ export interface SeedResult {
   scoutEarningsUsd: string;
 }
 
+let seedRunning = false;
+
 export async function seedDemo(opts: { targetHandle: string; reset?: boolean }): Promise<SeedResult> {
+  if (seedRunning) throw new Error("seed-already-running");
+  seedRunning = true;
+  try {
+    return await runSeed(opts);
+  } finally {
+    seedRunning = false;
+  }
+}
+
+async function runSeed(opts: { targetHandle: string; reset?: boolean }): Promise<SeedResult> {
   const handle = opts.targetHandle.trim().replace(/^@/, "").toLowerCase();
   const [targetRow] = await db.query<Record<string, unknown>>(
     "SELECT * FROM users WHERE LOWER(handle) = $1",
@@ -302,28 +340,25 @@ export async function seedDemo(opts: { targetHandle: string; reset?: boolean }):
   const now = Date.now();
 
   // ---- cast accounts ----
-  const cast: User[] = [];
-  for (const [i, member] of CAST.entries()) {
+  const cast: User[] = CAST.map((member, i) => {
     const authId = `${CAST_AUTH_PREFIX}${member.slug}`;
-    const wallet = deriveWallet(authId);
-    const user: User = {
+    return {
       id: `usr_democast_${member.slug}`,
       authId,
       privyId: null,
       displayName: member.name,
       handle: member.handle,
       avatarUrl: images.posts[(i + 2) % images.posts.length]!,
-      walletAddress: wallet.address,
+      walletAddress: deriveWallet(authId).address,
       isCreator: member.isCreator,
       createdAt: now - rand(30, 120) * DAY,
     };
-    await db.execute(
-      `INSERT INTO users (id, authId, privyId, displayName, handle, avatarUrl, walletAddress, isCreator, createdAt)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [user.id, user.authId, null, user.displayName, user.handle, user.avatarUrl, user.walletAddress, user.isCreator, user.createdAt]
-    );
-    cast.push(user);
-  }
+  });
+  await bulkInsert(
+    "users",
+    ["id", "authId", "privyId", "displayName", "handle", "avatarUrl", "walletAddress", "isCreator", "createdAt"],
+    cast.map((u) => [u.id, u.authId, null, u.displayName, u.handle, u.avatarUrl!, u.walletAddress, u.isCreator, u.createdAt])
+  );
 
   // Target becomes a creator and gets an avatar if it has none.
   await db.execute("UPDATE users SET isCreator = $1 WHERE id = $2", [true, target.id]);
@@ -333,51 +368,43 @@ export async function seedDemo(opts: { targetHandle: string; reset?: boolean }):
   const scouts = cast;
 
   // ---- follows (target gets followers; also follows some back) ----
-  let followers = 0;
-  await db.transaction(async (tx) => {
-    for (const c of cast) {
-      await tx.execute("INSERT INTO follows (followerId, followingId, createdAt) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [c.id, target.id, now - rand(1, 90) * DAY]);
-      followers++;
-    }
-    for (const c of sample(cast, 7)) {
-      await tx.execute("INSERT INTO follows (followerId, followingId, createdAt) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [target.id, c.id, now - rand(1, 60) * DAY]);
-    }
-    // cast follow each other for believable graphs
-    for (const a of cast) for (const b of sample(cast.filter((x) => x.id !== a.id), 4)) {
-      await tx.execute("INSERT INTO follows (followerId, followingId, createdAt) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [a.id, b.id, now - rand(1, 80) * DAY]);
-    }
-  });
+  const followSeen = new Set<string>();
+  const followRows: Cell[][] = [];
+  const addFollow = (a: string, b: string) => {
+    if (a === b || followSeen.has(`${a}>${b}`)) return;
+    followSeen.add(`${a}>${b}`);
+    followRows.push([a, b, now - rand(1, 90) * DAY]);
+  };
+  for (const c of cast) addFollow(c.id, target.id);
+  const followers = cast.length;
+  for (const c of sample(cast, 7)) addFollow(target.id, c.id);
+  for (const a of cast) for (const b of sample(cast.filter((x) => x.id !== a.id), 4)) addFollow(a.id, b.id);
+  await bulkInsert("follows", ["followerId", "followingId", "createdAt"], followRows);
 
   // ---- live streams (2 by target, 3 by cast creators) ----
   const streamOwners = [target.id, target.id, creators[0]!.id, creators[1]!.id, creators[2]!.id];
-  const streamIds: string[] = [];
-  for (let i = 0; i < 5; i++) {
-    const id = `demo_stream_${i + 1}`;
-    streamIds.push(id);
-    await db.execute(
-      `INSERT INTO streams (id, creatorId, title, videoUrl, durationSec, thumbnailUrl, startedAt, isLive, createdAt)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [id, streamOwners[i]!, STREAM_TITLES[i]!, SAMPLE_VIDEO, rand(600, 1400), images.streams[i]!, now - rand(3, 50) * 60_000, true, now - rand(3, 50) * 60_000]
-    );
-  }
+  const streamIds = Array.from({ length: 5 }, (_, i) => `demo_stream_${i + 1}`);
+  await bulkInsert(
+    "streams",
+    ["id", "creatorId", "title", "videoUrl", "durationSec", "thumbnailUrl", "startedAt", "isLive", "createdAt"],
+    streamIds.map((id, i) => [id, streamOwners[i]!, STREAM_TITLES[i]!, SAMPLE_VIDEO, rand(600, 1400), images.streams[i]!, now - rand(3, 50) * 60_000, true, now - rand(3, 50) * 60_000])
+  );
 
   // ---- reactions per stream (counts only; varied types/platforms/time) ----
-  let reactions = 0;
-  await db.transaction(async (tx) => {
-    for (const streamId of streamIds) {
-      const count = rand(60, 110);
-      for (let i = 0; i < count; i++) {
-        const u = pick(cast);
-        const serverTimeMs = now - rand(0, 40) * 60_000;
-        await tx.execute(
-          `INSERT INTO reactions (id, eventId, userId, walletAddress, streamId, streamTimeMs, serverTimeMs, type, platform, watchTimeMs, batchId)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-          [newId("demo_rx"), `demo_${newEventId()}`, u.id, u.walletAddress, streamId, rand(5_000, 900_000), serverTimeMs, pick(REACTIONS), pick(PLATFORMS), rand(20_000, 300_000), null]
-        );
-        reactions++;
-      }
+  const reactionRows: Cell[][] = [];
+  for (const streamId of streamIds) {
+    const count = rand(60, 110);
+    for (let i = 0; i < count; i++) {
+      const u = pick(cast);
+      reactionRows.push([newId("demo_rx"), `demo_${newEventId()}`, u.id, u.walletAddress, streamId, rand(5_000, 900_000), now - rand(0, 40) * 60_000, pick(REACTIONS), pick(PLATFORMS), rand(20_000, 300_000), null]);
     }
-  });
+  }
+  await bulkInsert(
+    "reactions",
+    ["id", "eventId", "userId", "walletAddress", "streamId", "streamTimeMs", "serverTimeMs", "type", "platform", "watchTimeMs", "batchId"],
+    reactionRows
+  );
+  const reactions = reactionRows.length;
 
   // ---- moments + earnings ----
   // Per-moment reward pools (USD). Dialled up so the demo reads as an established account.
@@ -420,52 +447,53 @@ export async function seedDemo(opts: { targetHandle: string; reset?: boolean }):
     moments.push(m);
   }
 
+  // Bulk-write moments, their founding curators, and views (few statements total).
+  const momentRows: Cell[][] = [];
+  const curatorRows: Cell[][] = [];
+  const momentViewRows: Cell[][] = [];
+  const castIds = cast.map((c) => c.id);
   for (const { moment, curators, viewers } of moments) {
-    await Moments.insert(moment, 0);
-    await Moments.setCurators(moment.id, curators);
-    await db.transaction(async (tx) => {
-      for (const v of sample([...cast.map((c) => c.id), ...viewers], rand(8, 40))) {
-        await tx.execute("INSERT INTO moment_views (momentId, viewerKey, viewedAt) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [moment.id, `user:${v}`, moment.confirmedAt ?? now]);
-      }
-    });
+    momentRows.push([
+      moment.id, moment.streamId, moment.creatorId, moment.state, moment.spikeStreamTimeMs,
+      moment.detectedAt, moment.confirmedAt, JSON.stringify(moment.clip), JSON.stringify(moment.metrics),
+      serializeSettlement(moment.settlement!), 0, moment.createdAt, moment.updatedAt,
+    ]);
+    for (const c of curators) curatorRows.push([c.momentId, c.userId, c.walletAddress, c.rank, c.qualifyingStreamTimeMs, c.qualifyingServerTimeMs, c.rewardUnits.toString()]);
+    const viewerIds = [...new Set([...castIds, ...viewers])];
+    for (const v of sample(viewerIds, rand(8, viewerIds.length))) momentViewRows.push([moment.id, `user:${v}`, moment.confirmedAt ?? now]);
   }
+  await bulkInsert("moments", ["id", "streamId", "creatorId", "state", "spikeStreamTimeMs", "detectedAt", "confirmedAt", "clip", "metrics", "settlement", "cooldownUntil", "createdAt", "updatedAt"], momentRows);
+  await bulkInsert("founding_curators", ["momentId", "userId", "walletAddress", "rank", "qualifyingStreamTimeMs", "qualifyingServerTimeMs", "rewardUnits"], curatorRows);
+  await bulkInsert("moment_views", ["momentId", "viewerKey", "viewedAt"], momentViewRows);
 
   // ---- posts (one per image; authors across cast + target) ----
-  const authors = [target.id, ...cast.map((c) => c.id)];
-  let postCount = 0;
-  const postIds: string[] = [];
-  for (let i = 0; i < images.posts.length; i++) {
-    const id = `demo_post_${i + 1}`;
-    postIds.push(id);
+  const authors = [target.id, ...castIds];
+  const postIds = images.posts.map((_, i) => `demo_post_${i + 1}`);
+  const postRows: Cell[][] = images.posts.map((url, i) => [
+    postIds[i]!,
     // Give the target 4 of the posts so its profile grid is populated.
-    const authorId = i < 4 ? target.id : pick(authors);
-    const createdAt = now - rand(0, 8) * DAY - rand(0, DAY);
-    await db.execute(
-      `INSERT INTO posts (id, authorId, body, mediaJson, linkUrl, streamId, momentId, communityId, replyToId, quotePostId, repostOfId, createdAt)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-      [id, authorId, POST_BODIES[i % POST_BODIES.length]!, JSON.stringify([images.posts[i]!]), null, null, null, null, null, null, null, createdAt]
-    );
-    postCount++;
+    i < 4 ? target.id : pick(authors),
+    POST_BODIES[i % POST_BODIES.length]!, JSON.stringify([url]), null, null, null, null, null, null, null,
+    now - rand(0, 8) * DAY - rand(0, DAY),
+  ]);
+  const postCols = ["id", "authorId", "body", "mediaJson", "linkUrl", "streamId", "momentId", "communityId", "replyToId", "quotePostId", "repostOfId", "createdAt"];
+  await bulkInsert("posts", postCols, postRows);
+  const postCount = postRows.length;
+  // a few replies to the target's first post (separate insert so the parent id is visible)
+  await bulkInsert("posts", postCols, Array.from({ length: 3 }, (_, r) => [
+    `demo_post_reply_${r + 1}`, pick(cast).id, pick(["this is so good", "need the setup list 🙏", "saving this fr"]),
+    "[]", null, null, null, null, postIds[0]!, null, null, now - rand(0, 2) * DAY,
+  ]));
+
+  // likes + views
+  const likeRows: Cell[][] = [];
+  const viewRows: Cell[][] = [];
+  for (const id of postIds) {
+    for (const liker of sample(cast, rand(4, cast.length))) likeRows.push([id, liker.id, now - rand(0, 6) * DAY]);
+    for (const viewer of sample(cast, rand(5, cast.length))) viewRows.push([id, `user:${viewer.id}`, now - rand(0, 6) * DAY]);
   }
-  // likes + views + a couple of replies
-  await db.transaction(async (tx) => {
-    for (const id of postIds) {
-      for (const liker of sample(cast, rand(4, cast.length))) {
-        await tx.execute("INSERT INTO post_likes (postId, userId, createdAt) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [id, liker.id, now - rand(0, 6) * DAY]);
-      }
-      for (const viewer of sample(cast, rand(5, cast.length))) {
-        await tx.execute("INSERT INTO post_views (postId, viewerKey, viewedAt) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [id, `user:${viewer.id}`, now - rand(0, 6) * DAY]);
-      }
-    }
-    // a few replies to the target's first post for replyCount
-    for (let r = 0; r < 3; r++) {
-      await tx.execute(
-        `INSERT INTO posts (id, authorId, body, mediaJson, linkUrl, streamId, momentId, communityId, replyToId, quotePostId, repostOfId, createdAt)
-         VALUES ($1,$2,$3,'[]',NULL,NULL,NULL,NULL,$4,NULL,NULL,$5)`,
-        [`demo_post_reply_${r + 1}`, pick(cast).id, pick(["this is so good", "need the setup list 🙏", "saving this fr"]), postIds[0]!, now - rand(0, 2) * DAY]
-      );
-    }
-  });
+  await bulkInsert("post_likes", ["postId", "userId", "createdAt"], likeRows);
+  await bulkInsert("post_views", ["postId", "viewerKey", "viewedAt"], viewRows);
 
   return {
     target: { id: target.id, handle: target.handle, displayName: target.displayName },
