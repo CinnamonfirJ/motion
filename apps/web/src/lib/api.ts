@@ -11,20 +11,37 @@ export function getToken() {
   return token;
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Backoff for transient failures (Render cold start returns 502/503/504 for ~50s before it wakes).
+const RETRY_BACKOFF_MS = [1000, 2000, 4000, 8000];
+
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, (body as any).error || res.statusText);
+  const headers = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(opts.headers || {}),
+  };
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= RETRY_BACKOFF_MS.length; attempt++) {
+    try {
+      const res = await fetch(`${API}${path}`, { ...opts, headers });
+      if (res.ok) return res.json() as Promise<T>;
+      // Retry gateway errors (service waking up); surface everything else immediately.
+      if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt < RETRY_BACKOFF_MS.length) {
+        await sleep(RETRY_BACKOFF_MS[attempt]!);
+        continue;
+      }
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, (body as any).error || res.statusText);
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      // Network error (fetch rejects) — retry with backoff, then give up.
+      lastError = error;
+      if (attempt < RETRY_BACKOFF_MS.length) { await sleep(RETRY_BACKOFF_MS[attempt]!); continue; }
+      throw error;
+    }
   }
-  return res.json() as Promise<T>;
+  throw lastError;
 }
 
 function speakerPath(streamId: string, userId: string): string {

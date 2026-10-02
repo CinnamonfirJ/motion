@@ -352,10 +352,17 @@ export async function registerSocialRoutes(app: FastifyInstance, auth: Auth) {
     if (!communityId && before > Date.now() - 60_000) {
       const followed = new Set(user ? (await db.query<Row>("SELECT followingId FROM follows WHERE followerId = $1", [user.id])).map((row) => str(row, "followingId")) : []);
       const eligible = (authorId: string) => !blocked.has(authorId) && (mode === "for-you" || authorId === user?.id || followed.has(authorId));
-      const live = (await Streams.live()).filter((stream) => eligible(stream.creatorId)).slice(0, 10);
-      for (const stream of live) items.push({ type: "stream", createdAt: stream.startedAt, score: 18, stream: await streamView(stream, hub.viewerCount(stream.id)) });
-      const moments = (await Moments.publicFeed(20)).filter((moment) => eligible(moment.creatorId));
-      for (const moment of moments) items.push({ type: "moment", createdAt: moment.confirmedAt ?? moment.createdAt, score: 12 / Math.pow(1 + (Date.now() - (moment.confirmedAt ?? moment.createdAt)) / 3_600_000, 0.8), moment: await momentView(moment) });
+      // Enrich streams + moments concurrently (each view does several lookups) so the feed isn't
+      // gated on a long sequential chain.
+      const [live, publicMoments] = await Promise.all([
+        Streams.live().then((streams) => streams.filter((stream) => eligible(stream.creatorId)).slice(0, 10)),
+        Moments.publicFeed(12).then((moments) => moments.filter((moment) => eligible(moment.creatorId))),
+      ]);
+      const [streamItems, momentItems] = await Promise.all([
+        Promise.all(live.map(async (stream) => ({ type: "stream" as const, createdAt: stream.startedAt, score: 18, stream: await streamView(stream, hub.viewerCount(stream.id)) }))),
+        Promise.all(publicMoments.map(async (moment) => ({ type: "moment" as const, createdAt: moment.confirmedAt ?? moment.createdAt, score: 12 / Math.pow(1 + (Date.now() - (moment.confirmedAt ?? moment.createdAt)) / 3_600_000, 0.8), moment: await momentView(moment) }))),
+      ]);
+      items.push(...streamItems, ...momentItems);
     }
     if (mode === "for-you" && !communityId) items.sort((a, b) => b.score - a.score || b.createdAt - a.createdAt);
     else items.sort((a, b) => b.createdAt - a.createdAt);

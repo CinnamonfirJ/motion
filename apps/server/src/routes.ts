@@ -39,6 +39,20 @@ function handleFromName(name: string): string {
   return `${base}${Math.floor(Math.random() * 900 + 100)}`;
 }
 
+/** Batch stream titles by id (unique + parallel) — avoids a momentView per earnings row. */
+async function streamTitles(ids: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids)];
+  const streams = await Promise.all(unique.map((id) => Streams.byId(id)));
+  return new Map(streams.flatMap((s) => (s ? [[s.id, s.title] as const] : [])));
+}
+
+/** Batch creator mini-DTOs by id (unique + parallel). */
+async function creatorMinis(ids: string[]): Promise<Map<string, { id: string; displayName: string; handle: string; avatarUrl: string | null }>> {
+  const unique = [...new Set(ids)];
+  const users = await Promise.all(unique.map((id) => Users.byId(id)));
+  return new Map(users.flatMap((u) => (u ? [[u.id, { id: u.id, displayName: u.displayName, handle: u.handle, avatarUrl: u.avatarUrl }] as const] : [])));
+}
+
 function viewerKey(req: FastifyRequest): string {
   const header = req.headers.authorization;
   const claims = header?.startsWith("Bearer ") ? verifyToken(header.slice(7)) : null;
@@ -700,26 +714,27 @@ export async function registerRoutes(app: FastifyInstance) {
   app.get("/earnings/scout", async (req, reply) => {
     const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
-    const entries = await Moments.curatorMomentsFor(user.id);
+    const entries = (await Moments.curatorMomentsFor(user.id)).sort((a, b) => (b.moment.confirmedAt ?? 0) - (a.moment.confirmedAt ?? 0));
     let total = 0n;
     let firstFinds = 0;
-    const rewards = [];
-    for (const { moment, curator } of entries.sort((a, b) => (b.moment.confirmedAt ?? 0) - (a.moment.confirmedAt ?? 0))) {
-        total += curator.rewardUnits;
-        if (curator.rank === 1) firstFinds++;
-        const view = await momentView(moment);
-        rewards.push({
-          momentId: moment.id,
-          streamTitle: view.streamTitle,
-          creator: view.creator,
-          rank: curator.rank,
-          rewardUnits: curator.rewardUnits.toString(),
-          rewardUsd: usd(curator.rewardUnits),
-          status: moment.settlement?.status ?? "pending",
-          clip: moment.clip,
-          confirmedAt: moment.confirmedAt,
-        });
+    for (const { curator } of entries) {
+      total += curator.rewardUnits;
+      if (curator.rank === 1) firstFinds++;
     }
+    // Batch the stream titles + creators (instead of a full momentView per entry).
+    const titleById = await streamTitles(entries.map((e) => e.moment.streamId));
+    const creatorById = await creatorMinis(entries.map((e) => e.moment.creatorId));
+    const rewards = entries.map(({ moment, curator }) => ({
+      momentId: moment.id,
+      streamTitle: titleById.get(moment.streamId) ?? "",
+      creator: creatorById.get(moment.creatorId) ?? null,
+      rank: curator.rank,
+      rewardUnits: curator.rewardUnits.toString(),
+      rewardUsd: usd(curator.rewardUnits),
+      status: moment.settlement?.status ?? "pending",
+      clip: moment.clip,
+      confirmedAt: moment.confirmedAt,
+    }));
     return {
       totalUnits: total.toString(),
       totalUsd: usd(total),
@@ -734,22 +749,21 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!user) return reply.code(401).send({ error: "unauthorized" });
     const moments = await Moments.createdByCreator(user.id);
     let total = 0n;
-    const payouts = [];
-    for (const m of moments) {
+    for (const m of moments) total += m.settlement?.creatorAmountUnits ?? 0n;
+    const titleById = await streamTitles(moments.map((m) => m.streamId));
+    const payouts = moments.map((m) => {
       const amt = m.settlement?.creatorAmountUnits ?? 0n;
-      total += amt;
-      const v = await momentView(m);
-      payouts.push({
+      return {
         momentId: m.id,
-        streamTitle: v.streamTitle,
+        streamTitle: titleById.get(m.streamId) ?? "",
         rewardUnits: amt.toString(),
         rewardUsd: usd(amt),
         status: m.settlement?.status ?? "pending",
         clip: m.clip,
         foundingCuratorCount: m.foundingCurators.length,
         confirmedAt: m.confirmedAt,
-      });
-    }
+      };
+    });
     return {
       totalUnits: total.toString(),
       totalUsd: usd(total),

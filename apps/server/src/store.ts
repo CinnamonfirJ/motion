@@ -382,9 +382,9 @@ export const Moments = {
   },
   async curatorMomentsFor(userId: string): Promise<{ moment: Moment; curator: FoundingCurator }[]> {
     const rows = await db.query<Row>("SELECT momentId FROM founding_curators WHERE userId = $1", [userId]);
+    const moments = await Promise.all(rows.map((row) => Moments.byId(String(value(row, "momentId")))));
     const output: { moment: Moment; curator: FoundingCurator }[] = [];
-    for (const row of rows) {
-      const moment = await this.byId(String(value(row, "momentId")));
+    for (const moment of moments) {
       const curator = moment?.foundingCurators.find((entry) => entry.userId === userId);
       if (moment && curator) output.push({ moment, curator });
     }

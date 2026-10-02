@@ -23,17 +23,34 @@ export function getToken() {
   return token;
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Backoff for transient failures (Render cold start returns 502/503/504 for ~50s before it wakes).
+const RETRY_BACKOFF_MS = [1000, 2000, 4000, 8000];
+
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts.headers || {}),
-    },
-  });
-  if (!res.ok) throw new ApiError((await res.json().catch(() => ({ error: res.statusText }))).error, res.status);
-  return res.json() as Promise<T>;
+  const headers = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(opts.headers || {}),
+  };
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= RETRY_BACKOFF_MS.length; attempt++) {
+    try {
+      const res = await fetch(`${API}${path}`, { ...opts, headers });
+      if (res.ok) return res.json() as Promise<T>;
+      if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt < RETRY_BACKOFF_MS.length) {
+        await sleep(RETRY_BACKOFF_MS[attempt]!);
+        continue;
+      }
+      throw new ApiError((await res.json().catch(() => ({ error: res.statusText }))).error, res.status);
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      lastError = error;
+      if (attempt < RETRY_BACKOFF_MS.length) { await sleep(RETRY_BACKOFF_MS[attempt]!); continue; }
+      throw error;
+    }
+  }
+  throw lastError;
 }
 
 function speakerPath(streamId: string, userId: string): string {
