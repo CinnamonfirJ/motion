@@ -25,7 +25,7 @@ export function permanentMediaConfigured(): boolean {
 function s3Client(): S3Client {
   return new S3Client({
     endpoint: env.R2_ENDPOINT,
-    region: env.LIVEKIT_EGRESS_REGION || "auto",
+    region: env.R2_REGION !== "auto" ? env.R2_REGION : env.LIVEKIT_EGRESS_REGION || "auto",
     forcePathStyle: true,
     credentials: { accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY },
     // R2 rejects the AWS SDK v3 default flexible checksums; keep them off for compatibility.
@@ -67,7 +67,7 @@ export async function startStreamRecording(streamId: string): Promise<{ egressId
       value: {
         accessKey: env.R2_ACCESS_KEY_ID,
         secret: env.R2_SECRET_ACCESS_KEY,
-        region: env.LIVEKIT_EGRESS_REGION || "auto",
+        region: env.R2_REGION !== "auto" ? env.R2_REGION : env.LIVEKIT_EGRESS_REGION || "auto",
         endpoint: env.R2_ENDPOINT,
         bucket: env.R2_BUCKET,
         forcePathStyle: true,

@@ -39,10 +39,20 @@ import { settleMoment } from "./settlement.js";
 import { getChain, hashFns, toBytes32, momentIdHash } from "./chain.js";
 import { noteWatch, watchMs as getWatchMs } from "./watch.js";
 import { env } from "./env.js";
+// Circular with seed.ts (which imports ingestReaction); safe because demoCrowd() is only called at runtime.
+import { demoCrowd } from "./seed.js";
 import { buildPermanentMomentClip, permanentMediaConfigured } from "./media.js";
 
 /** Product config. In a fuller build this could be per-stream; here it is one source of truth. */
-export const config: MomentConfig = DEFAULT_CONFIG;
+// Small-team testing override (never in production): N unique reactors, ~3 reactions each.
+const testMinReactors = env.IS_PRODUCTION ? 0 : Math.max(0, Math.floor(env.MOMENT_MIN_REACTORS));
+export const config: MomentConfig = testMinReactors
+  ? { ...DEFAULT_CONFIG, confirmation: { ...DEFAULT_CONFIG.confirmation, minUniqueReactors: testMinReactors, minTotalReactions: testMinReactors * 3 } }
+  : DEFAULT_CONFIG;
+const spikeCfg = (testMinReactors
+  ? { ...SPIKE_CONFIG, minimumUniqueReactors: testMinReactors }
+  : SPIKE_CONFIG) as typeof SPIKE_CONFIG;
+if (testMinReactors) console.warn(`[moment] TEST MODE: Moments need only ${testMinReactors} unique reactor(s) (MOMENT_MIN_REACTORS)`);
 
 const CLIP_PROCESSING_MS = 1_500; // simulated clip build time (design §19 "Building your Moment…")
 
@@ -121,6 +131,7 @@ async function broadcastActivity(streamId: string, now: number) {
   const evalr = evaluateUniqueSpike(toReactorSamples(await Reactions.inWindow(streamId, now - baselineMs, now)), {
     now,
     cooldownUntil: await Moments.cooldownUntil(streamId),
+    cfg: spikeCfg,
   });
   const heatingUp = !evalr.isSpike && evalr.uniqueRecent >= Math.max(2, Math.ceil(evalr.threshold * 0.6));
 
@@ -139,6 +150,7 @@ async function detect(streamId: string, now: number) {
   const evalr = evaluateUniqueSpike(toReactorSamples(history), {
     now,
     cooldownUntil: await Moments.cooldownUntil(streamId),
+    cfg: spikeCfg,
   });
   if (!evalr.isSpike) return;
 
@@ -276,6 +288,18 @@ async function candidateReactions(moment: Moment, deadline: number): Promise<Rea
   return Reactions.inWindow(moment.streamId, from, deadline);
 }
 
+/** Demo only: eligible real Scouts outrank the seeded demo crowd, which otherwise wins every slot
+ *  on watch time + accumulated reputation. Production keeps pure score order. */
+function prioritizeRealScouts<T extends { userId: string; rank: number }>(scored: T[]): T[] {
+  const max = CURATOR_SCORE_CONFIG.maxFoundingCurators;
+  let ordered = scored;
+  if (!env.IS_PRODUCTION) {
+    const botIds = new Set(demoCrowd().map((b) => b.id));
+    ordered = [...scored.filter((c) => !botIds.has(c.userId)), ...scored.filter((c) => botIds.has(c.userId))];
+  }
+  return ordered.slice(0, max).map((c, i) => ({ ...c, rank: i + 1 }));
+}
+
 async function resolveConfirmation(moment: Moment, now: number) {
   const deadline = now;
   const reactions = await candidateReactions(moment, deadline);
@@ -317,7 +341,10 @@ async function resolveConfirmation(moment: Moment, now: number) {
     }
   }
   const windowStart = moment.detectedAt - SPIKE_CONFIG.recentWindowSeconds * 1000;
-  const selected = scoreFoundingCurators([...byUser.values()], windowStart, deadline, CURATOR_SCORE_CONFIG);
+  const selected = prioritizeRealScouts(
+    scoreFoundingCurators([...byUser.values()], windowStart, deadline, // Score everyone; prioritizeRealScouts trims to the real slot count.
+    { ...CURATOR_SCORE_CONFIG, maxFoundingCurators: byUser.size } as unknown as typeof CURATOR_SCORE_CONFIG)
+  );
 
   // Compute reward split now so the celebration can show the amount immediately ("pending").
   const dist = distributeReward(config.reward.defaultPoolUnits, selected.length, config.reward, config.curator);
