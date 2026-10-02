@@ -37,11 +37,15 @@ async function main() {
     if (durationMs >= 2_000) request.log.warn({ method: request.method, route: request.routeOptions.url ?? "unknown", statusCode: reply.statusCode, durationMs }, "slow request");
     requestTimers.delete(request);
   });
-  const allowedOrigins = new Set(
-    env.IS_PRODUCTION
-      ? env.CORS_ORIGINS
-      : [...env.CORS_ORIGINS, env.PUBLIC_WEB_URL, "http://localhost:5173", "http://127.0.0.1:5173"]
-  );
+  const allowedOrigins = new Set([
+    ...env.CORS_ORIGINS,
+    env.PUBLIC_WEB_URL,
+    // The production web app is served from these — allow them regardless of CORS_ORIGINS so a
+    // stale env var can't block the live site (e.g. after a domain move to www.ennoia.live).
+    "https://ennoia.live",
+    "https://www.ennoia.live",
+    ...(env.IS_PRODUCTION ? [] : ["http://localhost:5173", "http://127.0.0.1:5173"]),
+  ]);
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(sensible);
   await app.register(rateLimit, { max: 300, timeWindow: "1 minute" });
