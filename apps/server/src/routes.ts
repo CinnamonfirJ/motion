@@ -896,7 +896,12 @@ export async function registerRoutes(app: FastifyInstance) {
     const provided = (req.headers["x-seed-secret"] as string | undefined) ?? body.secret;
     if (!env.DEMO_SEED_SECRET || provided !== env.DEMO_SEED_SECRET) return reply.code(403).send({ error: "forbidden" });
     try {
-      if (body.clearOnly) return { cleared: true, ...(await clearDemoData()) };
+      if (body.clearOnly) {
+        const counts = await clearDemoData();
+        // Optionally undo the seeded profile bits on a real account (isCreator + demo avatar).
+        const profileReset = body.handle ? await Users.resetSeededProfile(body.handle, `${env.R2_PUBLIC_BASE_URL}/demo/`) : 0;
+        return { cleared: true, ...counts, profileReset };
+      }
       if (!body.handle) return reply.code(400).send({ error: "handle-required" });
       return await seedDemo({ targetHandle: body.handle, reset: body.reset !== false });
     } catch (error) {

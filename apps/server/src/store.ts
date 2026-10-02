@@ -68,6 +68,14 @@ export const Users = {
   async updateProfile(id: string, profile: { displayName: string; handle: string; avatarUrl: string | null }): Promise<void> {
     await db.execute("UPDATE users SET displayName = $1, handle = $2, avatarUrl = $3 WHERE id = $4", [profile.displayName, profile.handle, profile.avatarUrl, id]);
   },
+  // Undo the profile bits the demo seeder set on a real account: clear isCreator, and null the
+  // avatar only if it still points at a (now-deleted) demo image. Returns rows affected.
+  async resetSeededProfile(handle: string, demoAvatarPrefix: string): Promise<number> {
+    return db.execute(
+      "UPDATE users SET isCreator = $1, avatarUrl = CASE WHEN avatarUrl LIKE $2 THEN NULL ELSE avatarUrl END WHERE LOWER(handle) = $3",
+      [false, `${demoAvatarPrefix}%`, handle.toLowerCase()]
+    );
+  },
   async create(input: Omit<User, "id" | "createdAt"> & { id?: string }): Promise<User> {
     const user: User = {
       ...input,
