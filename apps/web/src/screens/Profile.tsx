@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { Avatar, Card, Button } from "../components/ui";
 import { shortAddr } from "../lib/format";
 import { getTheme, setTheme, type Theme } from "../lib/theme";
+import { SigningDetails } from "../components/SigningSession";
 
 export function Profile() {
   const { user, logout } = useSession();
@@ -52,7 +53,8 @@ export function Profile() {
               <span className="text-text-muted">Wallet</span>
               <span className="text-text-secondary tabular-nums">{shortAddr(user.walletAddress)}</span>
             </div>
-            <p className="text-micro text-text-muted pt-1">Created automatically. No seed phrase needed.</p>
+            <p className="text-micro text-text-muted pt-1">Derived from your passkey. No seed phrase, nothing stored.</p>
+            <div className="pt-2"><SigningDetails /></div>
           </div>
         )}
         <Row label="Notifications" value="On" />
@@ -82,7 +84,7 @@ export function Profile() {
       <button
         className="w-full py-3 text-bodysm text-error"
         onClick={async () => {
-          if (!window.confirm("Delete your ENNOIA account? This deletes your Privy login and anonymizes offchain activity. Public Monad transactions cannot be erased.")) return;
+          if (!window.confirm("Delete your ENNOIA account? This anonymizes your offchain activity (your passkey stays on your device — remove it in your password manager). Public Monad transactions cannot be erased.")) return;
           await api.deleteAccount();
           await logout();
         }}

@@ -33,7 +33,31 @@ export interface ChainClient {
   enabled: boolean;
   contract: ethers.Contract | null;
   provider: ethers.JsonRpcProvider | null;
+  /** Settler signer (nonce-managed). Use only via submitSettlerTx. */
+  signer: ethers.NonceManager | null;
   explorerTx: (hash: string) => string;
+  monadScanTx: (hash: string) => string;
+  monadVisionTx: (hash: string) => string;
+}
+
+// ---------- serialized settler submissions ----------
+// createMoment, commitReactionBatch, settleMoment and onboarding drips all sign with the same
+// key. Fired concurrently they raced for the same nonce ("nonce too low" / "replacement
+// underpriced") and silently dropped. Submission (NOT receipt waiting) is serialized here.
+let txQueue: Promise<unknown> = Promise.resolve();
+
+export function submitSettlerTx<T>(send: () => Promise<T>): Promise<T> {
+  const run: Promise<T> = txQueue.then(async (): Promise<T> => {
+    try {
+      return await send();
+    } catch (err) {
+      // A failed populate/estimate still bumps NonceManager's local delta — resync from chain.
+      cached?.signer?.reset();
+      throw err;
+    }
+  });
+  txQueue = run.catch(() => undefined);
+  return run;
 }
 
 let cached: ChainClient | null = null;
@@ -60,20 +84,26 @@ export function getChain(): ChainClient {
       enabled: false,
       contract: null,
       provider: null,
+      signer: null,
       explorerTx: (h) => `${env.MONAD_EXPLORER_TX}${h}`,
+      monadScanTx: (h) => `https://testnet.monadscan.com/tx/${h}`,
+      monadVisionTx: (h) => `https://testnet.monadvision.com/tx/${h}`,
     };
     return cached;
   }
 
   // Pin the network (chainId) so ethers skips auto-detection round-trips against Monad.
   const provider = new ethers.JsonRpcProvider(env.MONAD_RPC_URL, env.MONAD_CHAIN_ID || undefined);
-  const signer = new ethers.Wallet(env.SETTLER_PRIVATE_KEY, provider);
+  const signer = new ethers.NonceManager(new ethers.Wallet(env.SETTLER_PRIVATE_KEY, provider));
   const contract = new ethers.Contract(address, MINIMAL_ABI, signer);
   cached = {
     enabled: true,
     contract,
     provider,
+    signer,
     explorerTx: (h) => `${env.MONAD_EXPLORER_TX}${h}`,
+    monadScanTx: (h) => `https://testnet.monadscan.com/tx/${h}`,
+    monadVisionTx: (h) => `https://testnet.monadvision.com/tx/${h}`,
   };
   return cached;
 }

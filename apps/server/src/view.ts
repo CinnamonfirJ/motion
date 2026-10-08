@@ -3,9 +3,15 @@ import { env, livekitConfigured } from "./env.js";
 import { getChain, momentIdHash } from "./chain.js";
 import { roomNameForStream } from "./livekit.js";
 import { Users, Streams, Moments } from "./store.js";
+import { ethers } from "ethers";
 
 /** DTOs are JSON-safe (no bigint) and carry human display values. Clients never see raw units. */
 export const usd = (units: bigint) => formatUsd(units, env.UNITS_PER_USD);
+/** Exact on-chain amount (18-decimal MON), so the demo USD figure can be checked against a wallet. */
+export const mon = (units: bigint) => `${(Number(units) / 1e18).toFixed(4)} MON`;
+/** Only a confirmed, real (non-simulated) settlement has actually paid the wallet. */
+export const isPaid = (settlement: { status: string; simulated?: boolean } | null | undefined) =>
+  settlement?.status === "confirmed" && !settlement.simulated;
 
 export function userView(u: User) {
   return {
@@ -57,15 +63,21 @@ function curatorView(c: FoundingCurator, userById: Map<string, User>) {
   };
 }
 
-function settlementView(s: Settlement | null) {
+export function settlementView(s: Settlement | null) {
   if (!s) return null;
   const chain = getChain();
+  const simulated = s.simulated === true
+    || s.momentId.startsWith("demo_mom_")
+    || s.txHash === ethers.keccak256(ethers.toUtf8Bytes(`sim:${s.momentId}`));
+  const txHash = simulated ? null : s.txHash;
   return {
     status: s.status,
-    txHash: s.txHash,
-    explorerUrl: s.txHash ? chain.explorerTx(s.txHash) : null,
+    txHash,
+    explorerUrl: chain.enabled && txHash ? chain.explorerTx(txHash) : null,
+    monadScanUrl: chain.enabled && txHash ? chain.monadScanTx(txHash) : null,
+    monadVisionUrl: chain.enabled && txHash ? chain.monadVisionTx(txHash) : null,
     network: "Monad",
-    onchain: chain.enabled,
+    onchain: chain.enabled && !simulated,
     creatorAmountUsd: usd(s.creatorAmountUnits),
     curatorPoolUsd: usd(s.curatorPoolUnits),
     totalUsd: usd(s.totalUnits),

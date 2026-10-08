@@ -354,10 +354,13 @@ export async function registerSocialRoutes(app: FastifyInstance, auth: Auth) {
       const eligible = (authorId: string) => !blocked.has(authorId) && (mode === "for-you" || authorId === user?.id || followed.has(authorId));
       // Enrich streams + moments concurrently (each view does several lookups) so the feed isn't
       // gated on a long sequential chain.
-      const [live, publicMoments] = await Promise.all([
+      const [live, allPublicMoments] = await Promise.all([
         Streams.live().then((streams) => streams.filter((stream) => eligible(stream.creatorId)).slice(0, 10)),
         Moments.publicFeed(12).then((moments) => moments.filter((moment) => eligible(moment.creatorId))),
       ]);
+      const momentStreams = await Streams.byIds(allPublicMoments.map((moment) => moment.streamId));
+      const liveStreamIds = new Set(momentStreams.filter((stream) => stream.isLive).map((stream) => stream.id));
+      const publicMoments = allPublicMoments.filter((moment) => !moment.clip.manual || !liveStreamIds.has(moment.streamId));
       const [streamItems, momentViewsList] = await Promise.all([
         Promise.all(live.map(async (stream) => ({ type: "stream" as const, createdAt: stream.startedAt, score: 18, stream: await streamView(stream, hub.viewerCount(stream.id)) }))),
         momentViews(publicMoments),

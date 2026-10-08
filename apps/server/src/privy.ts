@@ -49,24 +49,29 @@ function nameFromUser(user: PrivyUser): string | null {
 }
 
 /**
- * Verify a Privy access token and resolve the caller's identity + embedded wallet.
+ * Verify a Privy access token's signature + expiry and return the Privy user id (no user API call).
  * Throws on an invalid/expired token so the route can return 401.
  */
-export async function verifyPrivyToken(accessToken: string): Promise<PrivyIdentity> {
+export async function verifyPrivyAccessToken(accessToken: string): Promise<string> {
   if (!privyConfigured()) throw new Error("privy-not-configured");
-  const privy = getClient();
   // The current Node SDK verifies locally through the app's JWKS (or key override).
-  const claims = await privy.utils().auth().verifyAccessToken(accessToken);
+  const claims = await getClient().utils().auth().verifyAccessToken(accessToken);
+  return claims.user_id;
+}
+
+/** Resolve a verified Privy user's embedded wallet + display name via the Privy user API. */
+export async function fetchPrivyIdentity(privyId: string): Promise<PrivyIdentity> {
+  const privy = getClient();
   // Wallet creation can finish on the client just before it is visible to the user API.
-  let user = await privy.users()._get(claims.user_id);
+  let user = await privy.users()._get(privyId);
   let walletAddress = walletFromUser(user);
   for (let attempt = 0; !walletAddress && attempt < 3; attempt++) {
     await new Promise((resolve) => setTimeout(resolve, 200 * 2 ** attempt));
-    user = await privy.users()._get(claims.user_id);
+    user = await privy.users()._get(privyId);
     walletAddress = walletFromUser(user);
   }
   return {
-    privyId: claims.user_id,
+    privyId,
     walletAddress,
     displayName: nameFromUser(user),
   };

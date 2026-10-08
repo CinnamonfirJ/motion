@@ -68,6 +68,12 @@ async function main() {
     { parseAs: "buffer", bodyLimit: 16_000_000 },
     (_req, body, done) => done(null, body)
   );
+  // Browser-recorded 35s Moment clips (POST /moments/:id/clip-video).
+  app.addContentTypeParser(
+    ["video/webm", "video/mp4"],
+    { parseAs: "buffer", bodyLimit: 16_000_000 },
+    (_req, body, done) => done(null, body)
+  );
 
   await migrateDatabase();
   if (!(await databaseReady())) throw new Error("Database readiness check failed after migration.");
@@ -123,9 +129,14 @@ async function main() {
         if (msg.type === "pong") return;
         if (msg.type === "auth" && typeof msg.token === "string") {
           const claims = verifyToken(msg.token);
-          if (!claims) return socket.send(JSON.stringify({ t: "auth", ok: false }));
+          if (!claims) {
+            hub.unauthenticate(conn);
+            return socket.send(JSON.stringify({ t: "auth", ok: false }));
+          }
           hub.authenticate(conn, claims.userId);
           socket.send(JSON.stringify({ t: "auth", ok: true }));
+        } else if (msg.type === "logout") {
+          hub.unauthenticate(conn);
         } else if (msg.type === "subscribe" && msg.streamId) hub.subscribe(conn, msg.streamId);
         else if (msg.type === "unsubscribe" && msg.streamId) hub.unsubscribe(conn, msg.streamId);
       } catch {
@@ -143,7 +154,7 @@ async function main() {
   const chain = getChain();
   console.log(`\n  ENNOIA backend on http://${env.HOST}:${env.PORT}`);
   console.log(`  Database:   ${db.dialect === "postgres" ? "Neon PostgreSQL" : "local SQLite (development only)"}`);
-  console.log(`  Auth:       ${privyConfigured() ? "Privy (passkey + embedded wallet)" : "fallback (email + native WebAuthn)"}`);
+  console.log(`  Auth:       ${env.AUTH_PROVIDER === "mera" ? "Mera (passkey-derived accounts)" : "fallback (email + native WebAuthn)"}${privyConfigured() ? " + legacy Privy exchange" : ""}`);
   console.log(`  Livestream: ${livekitConfigured() ? "LiveKit rooms" : "fake-live VOD player"}`);
   console.log(`  Settlement: ${chain.enabled ? `REAL Monad tx (chainId ${env.MONAD_CHAIN_ID})` : "local simulation (no RPC/key configured)"}`);
   console.log(`  Analytics:  ${envioConfigured() ? "Envio indexer" : "database aggregates"}`);

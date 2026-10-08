@@ -16,12 +16,12 @@ describe("distributeReward", () => {
     expect(sum(d.curatorUnits)).toBe(d.curatorPoolUnits);
   });
 
-  it("applies the 70/20/10 split (creator / curators / platform)", () => {
+  it("applies the PRD 70/30 split (creator / curators, no platform cut)", () => {
     const total = 1_000_000n;
     const d = distributeReward(total, 5, reward, curator);
     expect(d.creatorUnits).toBe(700_000n);
-    expect(d.curatorPoolUnits).toBe(200_000n);
-    expect(d.platformUnits).toBe(100_000n);
+    expect(d.curatorPoolUnits).toBe(300_000n);
+    expect(d.platformUnits).toBe(0n);
   });
 
   it("rank-weighted distribution favors earlier ranks (5/4/3/2/1)", () => {
@@ -36,17 +36,17 @@ describe("distributeReward", () => {
 
   it("equal distribution splits the curator pool evenly with deterministic remainder", () => {
     const cfg = makeConfig({ curator: { distribution: "equal" } }).curator;
-    const total = 1_500_000n;
-    const d = distributeReward(total, 3, reward, cfg); // curator pool = 20% = 300000
+    const total = 1_000_000n;
+    const d = distributeReward(total, 3, reward, cfg); // curator pool = 30% = 300000
     expect(sum(d.curatorUnits)).toBe(300_000n);
     expect(d.curatorUnits).toEqual([100_000n, 100_000n, 100_000n]);
   });
 
-  it("folds the curator pool into the creator when there are no curators (platform still cut)", () => {
+  it("folds the curator pool into the creator when there are no curators", () => {
     const total = 1_000_000n;
     const d = distributeReward(total, 0, reward, curator);
-    expect(d.platformUnits).toBe(100_000n);
-    expect(d.creatorUnits).toBe(900_000n); // 70% + 20% folded
+    expect(d.platformUnits).toBe(0n);
+    expect(d.creatorUnits).toBe(1_000_000n); // 70% + 30% folded
     expect(d.creatorUnits + d.platformUnits).toBe(total);
     expect(d.curatorUnits).toEqual([]);
   });

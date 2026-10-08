@@ -19,10 +19,10 @@ function Section({ title, children }: React.PropsWithChildren<{ title: string }>
 
 function Privacy() {
   return <>
-    <Section title="What ENNOIA processes"><p>We process your Privy account identifier, public wallet address, profile details, streams, reactions, clips, reports, blocks, and service diagnostics needed to operate and secure ENNOIA. Camera and microphone media is sent when you choose to publish as a host or approved speaker.</p></Section>
-    <Section title="Where data goes"><p>Privy provides authentication and embedded wallets; LiveKit carries live audio/video; Cloudflare R2 stores recordings and clips; Neon stores application records; Monad records public transactions; Envio indexes public Monad events; and the configured hosting providers serve the app.</p></Section>
+    <Section title="What ENNOIA processes"><p>We process your public wallet address (derived on your device from your passkey; we never receive the passkey or any key), profile details, streams, reactions, clips, reports, blocks, and service diagnostics needed to operate and secure ENNOIA. Camera and microphone media is sent when you choose to publish as a host or approved speaker.</p></Section>
+    <Section title="Where data goes"><p>Your passkey and account keys stay on your device (Mera); LiveKit carries live audio/video; Cloudflare R2 stores recordings and clips; Neon stores application records; Monad records public transactions; Envio indexes public Monad events; and the configured hosting providers serve the app.</p></Section>
     <Section title="Public blockchain data"><p>Monad transactions and wallet addresses are public and cannot be deleted by ENNOIA. Do not include private information in transaction data.</p></Section>
-    <Section title="Retention and control"><p>You can report or block users and delete your account in Profile. Deletion removes the Privy login and anonymizes offchain activity that must remain linked to streams, reactions, or rewards. Security, fraud, and legal records may be retained when necessary.</p></Section>
+    <Section title="Retention and control"><p>You can report or block users and delete your account in Profile. Deletion anonymizes offchain activity that must remain linked to streams, reactions, or rewards. Security, fraud, and legal records may be retained when necessary.</p></Section>
     <Section title="Contact"><p>Before launch, replace this paragraph with the project team's monitored privacy email and jurisdiction-specific contact details.</p></Section>
   </>;
 }

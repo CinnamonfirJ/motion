@@ -364,10 +364,18 @@ export const Moments = {
       [moment.id, moment.streamId, moment.creatorId, moment.state, moment.spikeStreamTimeMs, moment.detectedAt, moment.confirmedAt, JSON.stringify(moment.clip), JSON.stringify(moment.metrics), serializeSettlement(moment.settlement), cooldownUntil, moment.createdAt, moment.updatedAt]
     );
   },
+  /** Lifecycle/clip/metrics fields only. Settlement is written separately via setSettlement
+   *  because it is advanced by a background job that runs concurrently with the tick. */
   async update(moment: Moment): Promise<void> {
     await db.execute(
-      "UPDATE moments SET state = $1, confirmedAt = $2, clip = $3, metrics = $4, settlement = $5, updatedAt = $6 WHERE id = $7",
-      [moment.state, moment.confirmedAt, JSON.stringify(moment.clip), JSON.stringify(moment.metrics), serializeSettlement(moment.settlement), Date.now(), moment.id]
+      "UPDATE moments SET state = $1, confirmedAt = $2, clip = $3, metrics = $4, updatedAt = $5 WHERE id = $6",
+      [moment.state, moment.confirmedAt, JSON.stringify(moment.clip), JSON.stringify(moment.metrics), Date.now(), moment.id]
+    );
+  },
+  async setSettlement(momentId: string, settlement: Moment["settlement"]): Promise<void> {
+    await db.execute(
+      "UPDATE moments SET settlement = $1, updatedAt = $2 WHERE id = $3",
+      [serializeSettlement(settlement), Date.now(), momentId]
     );
   },
   async setCurators(momentId: string, curators: FoundingCurator[]): Promise<void> {

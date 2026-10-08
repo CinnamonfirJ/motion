@@ -1,23 +1,41 @@
-# Privy, LiveKit, Monad and Envio setup
+# Mera, LiveKit, Monad and Envio setup
 
-All four integrations are environment-gated. With their variables blank, the existing local
-demo continues to use fallback auth, seeded VOD streams, simulated settlement and SQLite
-analytics. Do not copy server secrets into `apps/web/.env` or `apps/mobile/.env`.
+The streaming, chain and indexing integrations are environment-gated. With their variables
+blank, the local demo uses seeded VOD streams, simulated settlement and SQLite analytics. Do
+not copy server secrets into `apps/web/.env` or `apps/mobile/.env`.
 
-## 1. Privy
+## 1. Accounts: Mera
 
-1. Create a Privy app and enable passkey login plus automatic Ethereum embedded-wallet
-   creation in its dashboard.
-2. Copy `apps/server/.env.example` to the server environment and set `PRIVY_APP_ID`,
-   `PRIVY_APP_SECRET`, and optionally `PRIVY_VERIFICATION_KEY`.
-3. Copy `apps/web/.env.example` to `apps/web/.env` and set only the public
-   `VITE_PRIVY_APP_ID` and optional `VITE_PRIVY_CLIENT_ID`.
-4. Add every web origin (local and production) to Privy's allowed origins.
+[Mera](https://mera.category.xyz) (`@category-labs/mera`) is the entire account layer on web.
+There is no seed phrase, wallet extension, custody backend or auth vendor, and nothing to
+configure beyond `AUTH_PROVIDER=mera` (the default).
 
-The browser performs passkey signup/login through Privy. It then sends the Privy access token
-to `POST /auth/privy`; the server verifies it, resolves the embedded wallet, and returns the
-existing short-lived ENNOIA session token. When Privy is active, legacy `/auth/login` and
-`/auth/passkey/*` routes cannot authorize users.
+**Onboarding (one prompt).** `createPasskeyWithPrfOutput` runs a single passkey ceremony and
+returns 32 bytes of WebAuthn PRF output. `apps/web/src/lib/mera.ts` turns those bytes into a
+BIP-44 Ethereum key (`m/44'/60'/0'/0/0`, Mera's documented recipe) and opens a Mera signing
+session. The session signs the server's single-use challenge without another prompt; the
+server (`apps/server/src/mera.ts`) recovers the address and upserts the user keyed by it
+(`authId = mera:<address>`). New testnet accounts receive `ONBOARD_DRIP_WEI` MON from
+`FAUCET_PRIVATE_KEY` so their first transaction needs no faucet.
+
+**Signing session scope.** One passkey tap opens a 15-minute session that signs, prompt-free,
+only `tip(bytes32)` calls to the MomentRewards contract on chain 10143, up to 0.01 MON each
+and 0.05 MON in total. Out-of-scope transactions and anything past the budget ask for the
+passkey for that one transaction and never widen the session. On expiry (or **Lock**) Mera
+zeroes the key; the next tip re-prompts once. The UI shows the remaining time and budget.
+
+**Stateless test.** Nothing secret is stored anywhere. `localStorage` holds only the app
+session token and an untrusted credential-ID hint; both are disposable. After clearing storage
+or on a fresh device with a synced passkey, "Sign in with passkey" runs one ceremony, derives
+the same address and lands in the same account. When a signed-in user unlocks signing, the
+derived address must match the account's address, so the wrong passkey can't sign.
+
+Passkeys are bound to the relying-party ID (`VITE_PASSKEY_RP_ID`, default: the page host).
+Keep it stable across deployments or users will derive different accounts.
+
+`AUTH_PROVIDER=fallback` keeps the local-only email/WebAuthn demo (set `VITE_AUTH_MODE=fallback`
+on web too). `POST /auth/privy` remains only for the mobile app until it moves to Mera's React
+Native client; set `PRIVY_APP_ID`/`PRIVY_APP_SECRET` to keep it enabled.
 
 ## 2. LiveKit
 
@@ -30,12 +48,22 @@ Live clips from a real room require LiveKit Egress plus object storage. The curr
 pre-roll and 20-second post-roll clip builder remains valid for VOD/recording URLs; configure
 an Egress recording pipeline before treating a real room as clip-ready.
 
+The viewer's **Clip it** action queues that same 35-second window around the tap timestamp.
+Real-room clips are extracted from the continuous Egress recording and appear in the Home feed
+after the stream ends; a manual clip does not create Founding Curators or trigger rewards. When
+the host ends a stream with a queued clip, ending waits for its remaining post-roll before Egress
+stops.
+
 ## 3. Monad
 
 Deploy `packages/contracts/contracts/MomentRewards.sol`, authorize and fund the backend
 settler, then set `MONAD_RPC_URL`, `MONAD_CHAIN_ID`, `MOMENT_REWARDS_ADDRESS`,
 `SETTLER_PRIVATE_KEY`, and `PLATFORM_ADDRESS` on the server. Without all required settlement
 values, the backend deliberately stays in its idempotent local simulation.
+
+On Monad testnet (chain ID `10143`), confirmed automatic Moments settle as soon as their clips
+are published. Curator payouts are sent to the embedded wallet addresses recorded on the
+reactions. The contract's reward pool must have enough MON for the configured Moment pool.
 
 ## 4. Envio
 

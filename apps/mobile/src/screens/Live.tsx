@@ -230,6 +230,7 @@ export function Live() {
           accessibilityLabel="End live stream"
           onPress={async () => {
             try {
+              setToast("Finishing queued clips before ending the stream…");
               await api.endStream(id);
               nav.goBack();
             } catch {
@@ -263,8 +264,8 @@ export function Live() {
             catch { setToast("Your tip needs a moment — still going through."); }
           }} />
           <StageBtn label="Clip it" Icon={Scissors} onPress={async () => {
-            try { const s = sync.current; const at = s ? streamTimeMs(s.startedAt, realtime.serverNow()) : 0; await api.clip(id, at); setToast("Clip saved to your finds"); }
-            catch { setToast("Your clip's coming together — one moment."); }
+            try { const s = sync.current; const at = s ? streamTimeMs(s.startedAt, realtime.serverNow()) : 0; await api.clip(id, at); setToast("35-second clip queued — it will appear on Home after the stream ends."); }
+            catch { setToast("Couldn't queue the clip. Check that this stream is recording and try again."); }
           }} />
         </View>
         <View style={{ flexDirection: "row", gap: 12 }}>

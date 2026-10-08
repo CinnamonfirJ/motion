@@ -67,9 +67,9 @@ export interface RewardConfig {
   defaultPoolUnits: bigint;
   /** Creator share in basis points (7000 = 70%). ENNOIA REWARD_SPLIT. */
   creatorShareBps: number;
-  /** Founding-Curator pool share in basis points (2000 = 20%). */
+  /** Founding-Curator pool share in basis points (3000 = 30%). */
   curatorShareBps: number;
-  /** Platform share in basis points (1000 = 10%). creator + curator + platform = 10000. */
+  /** Platform share in basis points (0 by default). creator + curator + platform = 10000. */
   platformShareBps: number;
 }
 
@@ -112,10 +112,10 @@ export const DEFAULT_CONFIG: MomentConfig = {
   reward: {
     // 0.02 MON per Moment by default (18-decimal token) — a small, safe demo pool draw.
     defaultPoolUnits: 20_000_000_000_000_000n,
-    // ENNOIA REWARD_SPLIT — creator 70 / curators 20 / platform 10.
+    // PRD §18 demo split — creator pool 70% / Founding-Curator pool 30% (no platform cut).
     creatorShareBps: 7_000,
-    curatorShareBps: 2_000,
-    platformShareBps: 1_000,
+    curatorShareBps: 3_000,
+    platformShareBps: 0,
   },
 };
 

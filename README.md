@@ -13,9 +13,79 @@ one identity/embedded-wallet, and one core logic package.
 
 ```
 Scout watches → reacts → reactions spike → Moment detected → Moment confirmed
-→ Founding Curators selected → 35s clip generated → reward settled on Monad
-→ Moment published → earnings updated
+→ Founding Curators selected → 35s clip generated → Moment published
+→ reward settled on Monad → earnings updated
 ```
+
+> **On traditional platforms, the creator generates the value and the platform captures it.**
+> ENNOIA flips this: when a viewer's attention helps surface a moment, they become a
+> **Founding Curator** and take a verifiable, onchain stake in it alongside the creator.
+
+---
+
+## For judges — Monad Metropolis, Track 3 (Social, Attention & Culture)
+
+**Try it:** https://www.ennoia.live · **Contract (verified source):**
+[`0xCb3cEcEE0F869C3162EB327186de851C621F4C81`](https://testnet.monadvision.com/address/0xCb3cEcEE0F869C3162EB327186de851C621F4C81) on Monad testnet (chain 10143)
+
+### Technical execution — it runs onchain and the results are checkable
+
+One full Moment, end to end, on Monad testnet:
+
+| Step | Transaction | What it proves |
+|---|---|---|
+| Reaction provenance | [`0xb22b…4aba`](https://testnet.monadvision.com/tx/0xb22b5d3c5ca4c0679f8919aca33f643bbb5ec2ed05332ebefb4cc2537cfa4aba) | `commitReactionBatch` — 10 reactions committed as **one Merkle root**, not 10 transactions |
+| Moment + curators recorded | [`0xea3c…1175`](https://testnet.monadvision.com/tx/0xea3c74e1270a5be4adb243263daeb7c15992d0b7539c92e5d1d56c6d71b51175) | `MomentCreated` + `FoundingCuratorRecorded` #1, #2 — rank is public before anyone is paid |
+| Reward settlement | [`0x8261…1cd6`](https://testnet.monadvision.com/tx/0x8261b211c4344e4c67135c7312b63ebafa761db4825b21f6a01f1333cc5e1cd6) | `settleMoment` — creator 0.014 MON (70%), curators 0.00333 + 0.00267 MON (30%, rank-weighted 5:4) |
+
+- **Idempotent settlement.** A second `settleMoment` for the same Moment reverts `AlreadySettled`,
+  so retries after an RPC failure can never double-pay.
+- **Deterministic attribution.** Founding Curators are the first 5 unique Scouts to react before
+  confirmation, one slot per account ([`packages/core/src/curators.ts`](packages/core/src/curators.ts)).
+- **Detection is relative, not absolute.** A spike is measured against *that stream's own*
+  baseline, so a 7-viewer stream can produce a Moment as easily as a 7,000-viewer one
+  ([`packages/core/src/momentMetrics.ts`](packages/core/src/momentMetrics.ts)).
+- **Publishing never waits on the chain.** The card shows "Reward settling…" and flips to
+  "Reward received" when the transaction confirms; every payout links to its receipt.
+
+### Design & craft — a social product, not a token feature
+
+- **No wallet UX.** Sign in with a passkey (Face ID / Touch ID / Windows Hello). That passkey
+  derives the user's Monad account on-device (Mera) — no extension, no seed phrase, no gas prompt.
+  New accounts get a small testnet top-up so their first tip just works.
+- **Three reactions** — 🔥 😂 😮 — are the whole input. The UI says "Moment detected", never "spike".
+- Web, iOS and Android share one account, one backend and one logic package.
+
+### Originality — attention becomes stake
+
+Reacting early is the act of curation. The onchain layer isn't decorative: it is the record of
+**who was early** (`FoundingCuratorRecorded`) and the mechanism that **pays them**
+(`CuratorPaid`). Remove the chain and there is no verifiable "Founding Curator #1".
+
+### Who it's for, and why they'd move
+
+- **Small creators** — big platforms bury their best 30 seconds. ENNOIA auto-clips the moment
+  the audience reacts to and pays the creator 70% of every Moment's reward.
+- **Scouts** — on Twitch or YouTube their attention is extracted for free. On ENNOIA, good taste is
+  provable onchain and rewarded.
+
+### Traction (live onchain numbers)
+
+At submission the contract has settled **8 Moments**, paid out **0.16 MON** to creators and
+Founding Curators, and received **0.011 MON** in tips — all readable from the contract
+(`totalSettledMoments`, `totalPaidOut`, `totalTips`).
+
+### Path forward (PRD §26)
+
+Creator Keys and bonding curves (deeper economic stake) · curator reputation as an open
+social graph · OBS integration for creator onboarding · production anti-Sybil infrastructure.
+
+### Honest limits of this MVP
+
+- Rewards come from a **pre-funded testnet pool** (0.02 MON per Moment) — the PRD's
+  "prove the settlement mechanism, not final token economics" (§18). Testnet MON has no market value.
+- LiveKit Egress recording isn't enabled, so live clips are recorded by viewers' browsers
+  (a rolling 15s-before / 20s-after buffer) and uploaded. Mobile apps don't record clips yet.
 
 ---
 
@@ -51,12 +121,13 @@ can never settle before it confirms, and settlement is idempotent on-chain and i
 
 ### Auth, streaming and indexing
 `APP_MODE=development` permits the zero-credential local demo. `APP_MODE=production`
-fails startup unless Neon, Privy, LiveKit, R2, Monad, Envio, CORS, and signing configuration
-are all present; production never silently falls back to mocks.
+fails startup unless Neon, LiveKit, R2, Monad, Envio, CORS, and signing configuration
+are all present and `AUTH_PROVIDER=mera`; production never silently falls back to mocks.
 
-- **Privy** is the production source of truth for passkey authentication and the user's
-  embedded EVM wallet. The backend verifies Privy access tokens, maps the Privy identity into
-  the existing user/session model, and disables legacy auth routes while Privy is configured.
+- **Mera** is the entire account layer. One passkey ceremony yields WebAuthn PRF output that
+  derives the user's Monad EOA on device; a scoped 15-minute Mera signing session makes tips
+  prompt-free. The backend only verifies a signature from that address — it never holds keys,
+  and identity reconstructs from the passkey alone on any device.
 - **LiveKit** carries real room audio/video. LiveKit Egress records HLS segments into
   **Cloudflare R2**, and the backend creates permanent 15-second pre-roll + 20-second
   post-roll Moment playlists. Clients receive only short-lived room tokens.
@@ -65,8 +136,8 @@ are all present; production never silently falls back to mocks.
 - **Envio** indexes those contract events for feeds, leaderboards and reward analytics. It is
   never used as the application database; Neon owns profiles, streams and raw reactions.
 
-When Privy is absent, the original WebAuthn/email plus deterministic-wallet path is available
-for local demo use only. See [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) for setup.
+`AUTH_PROVIDER=fallback` keeps the original WebAuthn/email plus deterministic-wallet path for
+local demo use only. See [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) for setup.
 
 ---
 
@@ -211,4 +282,4 @@ extension, and no EAS build was run here.
 
 All tunables live in **`packages/core/src/config.ts`** and **`momentConfig.ts`**. Spike windows,
 confirmation thresholds, 15s/20s clipping, Founding-Curator scoring, anti-cheat, and the
-70% creator / 20% curator / 10% platform split are centralized there.
+70% creator / 30% Founding Curator split (PRD §18, rank-weighted 5:4:3:2:1) are centralized there.

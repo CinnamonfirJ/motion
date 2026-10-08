@@ -102,17 +102,43 @@ export function MomentDetail() {
             <button onClick={() => setShowReceipt((v) => !v)} className="mt-3 font-mono text-label uppercase tracking-[0.1em] text-electric">
               {showReceipt ? "Hide" : "View"} onchain receipt
             </button>
+            {s.onchain && (
+              <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                {s.monadScanUrl && (
+                  <a href={s.monadScanUrl} target="_blank" rel="noreferrer" className="flex-1 border border-electric px-3 py-2 text-center font-mono text-label uppercase tracking-[0.1em] text-electric hover:bg-electric/10 transition-colors">
+                    View on MonadScan ↗
+                  </a>
+                )}
+                {s.monadVisionUrl && (
+                  <a href={s.monadVisionUrl} target="_blank" rel="noreferrer" className="flex-1 border border-lime px-3 py-2 text-center font-mono text-label uppercase tracking-[0.1em] text-lime hover:bg-lime/10 transition-colors">
+                    View on MonadVision ↗
+                  </a>
+                )}
+              </div>
+            )}
             {showReceipt && (
               <div className="mt-3 space-y-1.5 bg-surface2 p-3 text-bodysm">
                 <Row k="Network" v={s.network} />
                 <Row k="Status" v={s.status === "confirmed" ? "Confirmed" : s.status} />
                 <Row k="Transaction" v={s.txHash ? shortAddr(s.txHash) : "—"} />
                 <Row k="Mode" v={s.onchain ? "Onchain" : "Simulation"} />
-                {s.explorerUrl && (
-                  <a href={s.explorerUrl} target="_blank" rel="noreferrer" className="block pt-1 text-electric">
-                    Open in explorer →
-                  </a>
-                )}
+                <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 font-mono text-micro uppercase tracking-[0.08em]">
+                  {s.monadScanUrl && (
+                    <a href={s.monadScanUrl} target="_blank" rel="noreferrer" className="text-electric hover:underline">
+                      MonadScan ↗
+                    </a>
+                  )}
+                  {s.monadVisionUrl && (
+                    <a href={s.monadVisionUrl} target="_blank" rel="noreferrer" className="text-lime hover:underline">
+                      MonadVision ↗
+                    </a>
+                  )}
+                  {s.explorerUrl && (
+                    <a href={s.explorerUrl} target="_blank" rel="noreferrer" className="text-text-secondary hover:underline">
+                      Monad Explorer ↗
+                    </a>
+                  )}
+                </div>
               </div>
             )}
           </section>

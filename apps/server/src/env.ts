@@ -40,6 +40,12 @@ const list = (value: string | undefined): string[] =>
 
 const mode = appMode();
 
+function authProvider(): "mera" | "fallback" {
+  const value = process.env.AUTH_PROVIDER ?? "mera";
+  if (value === "mera" || value === "fallback") return value;
+  throw new Error(`Invalid AUTH_PROVIDER "${value}". Expected mera or fallback.`);
+}
+
 export const env = {
   APP_MODE: mode,
   IS_PRODUCTION: mode === "production",
@@ -65,7 +71,19 @@ export const env = {
   PLATFORM_ADDRESS: process.env.PLATFORM_ADDRESS ?? "",
   MONAD_EXPLORER_TX: process.env.MONAD_EXPLORER_TX ?? "https://testnet.monadexplorer.com/tx/",
 
-  /** Privy — auth + embedded-wallet source of truth. Blank APP_ID => fallback auth. */
+  /**
+   * Account layer for the web app. "mera" (default): passkey-derived accounts, verified by
+   * signature, no third party. "fallback": local-only email + native WebAuthn demo.
+   */
+  AUTH_PROVIDER: authProvider(),
+  /** Testnet MON sent to each new Mera account so its first transaction needs no faucet. 0 disables. */
+  ONBOARD_DRIP_WEI: BigInt(process.env.ONBOARD_DRIP_WEI ?? "30000000000000000"),
+  /** Funds onboarding drips. Defaults to SETTLER_PRIVATE_KEY; a separate key avoids nonce contention with settlement. */
+  FAUCET_PRIVATE_KEY: process.env.FAUCET_PRIVATE_KEY ?? "",
+  /** Monad addresses (Mera accounts) allowed to use /admin routes. */
+  ADMIN_ADDRESSES: list(process.env.ADMIN_ADDRESSES).map((a) => a.toLowerCase()),
+
+  /** Privy — legacy exchange for clients not yet on Mera (mobile). Blank APP_ID => /auth/privy disabled. */
   PRIVY_APP_ID: process.env.PRIVY_APP_ID ?? "",
   PRIVY_APP_SECRET: process.env.PRIVY_APP_SECRET ?? "",
   PRIVY_VERIFICATION_KEY: (process.env.PRIVY_VERIFICATION_KEY ?? "").replace(/\\n/g, "\n"),
@@ -78,9 +96,9 @@ export const env = {
   LIVEKIT_EGRESS_REGION: process.env.LIVEKIT_EGRESS_REGION ?? "",
 
   /** Cloudflare R2 (S3-compatible) — recordings and permanent Moment clips. */
-  /** Testing only (ignored in production): lowers the unique-reactor minimum for spike detection
-   *  and confirmation so a small team can trigger a real Moment. 0/blank = PRD defaults (4). */
-  MOMENT_MIN_REACTORS: Number(process.env.MOMENT_MIN_REACTORS || 0),
+  /** Minimum unique Scouts for Moment detection + confirmation (all modes). Default 2 suits a
+   *  small testnet audience; 1 lets a solo demo trigger a Moment; raise it for real crowds. */
+  MOMENT_MIN_REACTORS: Number(process.env.MOMENT_MIN_REACTORS || 2),
   R2_ENDPOINT: process.env.R2_ENDPOINT ?? "",
   /** S3 signing region. "auto" for R2; other S3-compatible stores (e.g. Supabase) need their real region. */
   R2_REGION: process.env.R2_REGION || "auto",
@@ -122,8 +140,6 @@ const productionRequirements: Array<[string, string]> = [
   ["JWT_SECRET", env.JWT_SECRET === "dev-only-ennoia-secret-change-me" ? "" : env.JWT_SECRET],
   ["PUBLIC_WEB_URL", env.PUBLIC_WEB_URL],
   ["CORS_ORIGINS", env.CORS_ORIGINS.join(",")],
-  ["PRIVY_APP_ID", env.PRIVY_APP_ID],
-  ["PRIVY_APP_SECRET", env.PRIVY_APP_SECRET],
   ["LIVEKIT_URL", env.LIVEKIT_URL],
   ["LIVEKIT_API_KEY", env.LIVEKIT_API_KEY],
   ["LIVEKIT_API_SECRET", env.LIVEKIT_API_SECRET],
@@ -148,6 +164,7 @@ export function validateEnvironment(): void {
   const missing = productionRequirements.filter(([, value]) => !value).map(([name]) => name);
   if (missing.length) throw new Error(`Production configuration is incomplete: ${missing.join(", ")}`);
   if (env.MONAD_CHAIN_ID !== 10143) throw new Error("Hackathon production must use Monad testnet chain id 10143.");
+  if (env.AUTH_PROVIDER !== "mera") throw new Error("Production must use AUTH_PROVIDER=mera.");
   if (env.ENABLE_SEED || env.ENABLE_DEMO_ROUTES) throw new Error("Seed data and demo mutation routes must be disabled in production.");
   if (!env.PUBLIC_WEB_URL.startsWith("https://")) throw new Error("PUBLIC_WEB_URL must use HTTPS in production.");
   if (env.CORS_ORIGINS.some((origin) => !origin.startsWith("https://"))) {
@@ -160,7 +177,7 @@ export function chainConfigured(): boolean {
   return Boolean(env.MONAD_RPC_URL && env.MOMENT_REWARDS_ADDRESS && env.SETTLER_PRIVATE_KEY);
 }
 
-/** True when Privy is the auth/wallet source of truth (else built-in fallback auth). */
+/** True when the legacy Privy exchange (/auth/privy) is available for older clients. */
 export function privyConfigured(): boolean {
   return Boolean(env.PRIVY_APP_ID && env.PRIVY_APP_SECRET);
 }

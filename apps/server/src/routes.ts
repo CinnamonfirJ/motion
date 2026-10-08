@@ -4,7 +4,8 @@ import { Users, Streams, Moments, Reactions, Safety, AccountDeletions, type Repo
 import { deriveWallet, issueToken, verifyToken, normalizeAuthId } from "./auth.js";
 import { issueChallenge, verifyClientData, Passkeys } from "./passkey.js";
 import { env, privyConfigured, livekitConfigured, envioConfigured } from "./env.js";
-import { verifyPrivyToken, syncPrivyProfile } from "./privy.js";
+import { fetchPrivyIdentity, syncPrivyProfile, verifyPrivyAccessToken } from "./privy.js";
+import { fundNewAccount, issueMeraChallenge, verifyMeraSignIn } from "./mera.js";
 import { processAccountDeletionJob } from "./accountDeletion.js";
 import { roomTokenFor } from "./livekit.js";
 import { LiveRooms } from "./liveRooms.js";
@@ -13,13 +14,13 @@ import { Moderation, type BanKind } from "./moderation.js";
 import { Analytics } from "./analytics.js";
 import { topCurators, trendingMoments, rewardHistory } from "./envio.js";
 import { createHmac, randomBytes } from "node:crypto";
-import { ingestReaction, config, demoFastForwardSettlement } from "./momentEngine.js";
+import { ingestReaction, config, demoFastForwardSettlement, manualClipPostRollRemainingMs, requestManualClip, claimClipUpload, attachClipVideo } from "./momentEngine.js";
 import { demoCrowd, demoForceSpike, demoResetStream } from "./seed.js";
 import { hub } from "./realtime.js";
-import { momentView, momentViews, streamView, userView, usd } from "./view.js";
+import { isPaid, momentView, momentViews, mon, streamView, userView, usd } from "./view.js";
 import { getChain, momentIdHash, toBytes32 } from "./chain.js";
-import { streamTimeMs } from "@ennoia/core";
-import { permanentMediaConfigured, startStreamRecording, stopStreamRecording } from "./media.js";
+import { reconcileStreamTime, streamTimeMs } from "@ennoia/core";
+import { clipUploadConfigured, permanentMediaConfigured, startStreamRecording, stopStreamRecording, uploadMomentClipVideo } from "./media.js";
 import { registerSocialRoutes } from "./social.js";
 import { seedDemo, clearDemoData } from "./demoSeed.js";
 
@@ -29,9 +30,18 @@ async function bearer(req: FastifyRequest): Promise<User | null> {
   const claims = verifyToken(h.slice(7));
   if (!claims) return null;
   const user = await Users.byId(claims.userId);
-  // Once Privy is configured, legacy fallback identities must not authorize protected actions.
-  if (privyConfigured() && !user?.privyId) return null;
+  if (!user) return null;
+  // Outside the local fallback mode, legacy email/WebAuthn identities must not authorize anything.
+  if (env.AUTH_PROVIDER !== "fallback" && !isMeraUser(user) && !(privyConfigured() && user.privyId)) return null;
   return user;
+}
+
+const MERA_AUTH_PREFIX = "mera:";
+const isMeraUser = (user: User) => user.authId.startsWith(MERA_AUTH_PREFIX);
+
+function isAdmin(user: User): boolean {
+  if (isMeraUser(user)) return env.ADMIN_ADDRESSES.includes(user.walletAddress.toLowerCase());
+  return !!user.privyId && env.ADMIN_PRIVY_IDS.includes(user.privyId);
 }
 
 function handleFromName(name: string): string {
@@ -71,9 +81,11 @@ export async function registerRoutes(app: FastifyInstance) {
 
   app.get("/time", async () => ({ serverTime: Date.now() }));
 
-  // Feature discovery: clients use this to choose Privy vs fallback auth, LiveKit vs VOD, etc.
+  // Feature discovery: clients use this to choose Mera vs fallback auth, LiveKit vs VOD, etc.
   app.get("/config", async () => ({
-    auth: privyConfigured() ? "privy" : "fallback",
+    auth: env.AUTH_PROVIDER,
+    // The only contract web clients may sign for without a fresh passkey prompt (tips).
+    momentRewardsAddress: getChain().contract ? String(getChain().contract!.target) : null,
     livestream: livekitConfigured() ? "livekit" : "vod",
     analytics: envioConfigured() ? "envio" : "local",
     chain: getChain().enabled ? "onchain" : "simulation",
@@ -81,7 +93,54 @@ export async function registerRoutes(app: FastifyInstance) {
   }));
 
   // ---------- auth ----------
-  // Privy sign-in (source of truth when configured): verify the Privy access token, upsert the
+  // Mera sign-in: the passkey-derived Monad address is the identity. The client signs a
+  // single-use challenge inside the Mera session its passkey ceremony just opened (no extra
+  // prompt); we recover the address and upsert the user. No key, PRF output or passkey data
+  // ever reaches the server, so clearing client storage or switching devices loses nothing.
+  const authLimit = { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } };
+
+  app.post("/auth/mera/challenge", authLimit, async (_req, reply) => {
+    if (env.AUTH_PROVIDER !== "mera") return reply.code(404).send({ error: "mera-disabled" });
+    return issueMeraChallenge();
+  });
+
+  app.post("/auth/mera", authLimit, async (req, reply) => {
+    if (env.AUTH_PROVIDER !== "mera") return reply.code(404).send({ error: "mera-disabled" });
+    const body = (req.body ?? {}) as { message?: string; signature?: string; displayName?: string };
+    if (typeof body.message !== "string" || typeof body.signature !== "string") {
+      return reply.code(400).send({ error: "message and signature required" });
+    }
+    let address: string;
+    try {
+      address = verifyMeraSignIn(body.message, body.signature);
+    } catch (e) {
+      return reply.code(401).send({ error: (e as Error).message });
+    }
+
+    const authId = `${MERA_AUTH_PREFIX}${address.toLowerCase()}`;
+    let user = await Users.byAuthId(authId);
+    if (!user) {
+      const displayName = body.displayName?.trim().slice(0, 40) || "Scout";
+      try {
+        user = await Users.create({
+          authId,
+          displayName,
+          handle: handleFromName(displayName),
+          avatarUrl: null,
+          walletAddress: address,
+          isCreator: false,
+        });
+      } catch (error) {
+        // Two tabs can finish the same first sign-in concurrently.
+        user = await Users.byAuthId(authId);
+        if (!user) throw error;
+      }
+      fundNewAccount(address, req.log);
+    }
+    return { token: issueToken(user.id), user: userView(user) };
+  });
+
+  // Legacy Privy sign-in, kept for clients that have not moved to Mera (mobile): verify the Privy access token, upsert the
   // user with their embedded wallet, then mint our own app session token. Passkey-first happens
   // entirely on the client via the Privy SDK; the server just verifies the result.
   app.post("/auth/privy", async (req, reply) => {
@@ -89,16 +148,37 @@ export async function registerRoutes(app: FastifyInstance) {
     const body = (req.body ?? {}) as { accessToken?: string; displayName?: string };
     if (!body.accessToken) return reply.code(400).send({ error: "accessToken required" });
 
-    let identity;
+    let privyId;
     try {
-      identity = await verifyPrivyToken(body.accessToken);
+      privyId = await verifyPrivyAccessToken(body.accessToken);
     } catch (e) {
       req.log.warn({ e }, "privy verify failed");
       return reply.code(401).send({ error: "invalid-privy-token" });
     }
+
+    // Returning users with a known wallet skip the Privy user API round trip (~1s) on sign-in;
+    // the wallet is re-synced in the background in case Privy rotated it.
+    const known = await Users.byPrivyId(privyId);
+    if (known?.walletAddress) {
+      void fetchPrivyIdentity(privyId)
+        .then((fresh) => {
+          if (fresh.walletAddress && fresh.walletAddress !== known.walletAddress)
+            return Users.linkPrivy(known.id, privyId, fresh.walletAddress);
+        })
+        .catch((e) => req.log.warn({ e }, "privy wallet resync failed"));
+      return { token: issueToken(known.id), user: userView(known) };
+    }
+
+    let identity;
+    try {
+      identity = await fetchPrivyIdentity(privyId);
+    } catch (e) {
+      req.log.warn({ e }, "privy user lookup failed");
+      return reply.code(401).send({ error: "invalid-privy-token" });
+    }
     if (!identity.walletAddress) return reply.code(400).send({ error: "no-embedded-wallet" });
 
-    let user = await Users.byPrivyId(identity.privyId);
+    let user = known;
     if (!user) {
       const displayName = body.displayName?.trim() || identity.displayName || "Scout";
       try {
@@ -125,7 +205,7 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/auth/login", async (req, reply) => {
-    if (privyConfigured()) return reply.code(404).send({ error: "fallback-auth-disabled" });
+    if (env.AUTH_PROVIDER !== "fallback") return reply.code(404).send({ error: "fallback-auth-disabled" });
     const body = (req.body ?? {}) as { provider?: string; email?: string; subject?: string; displayName?: string };
     const provider = body.provider ?? "email";
     const subject = body.email ?? body.subject;
@@ -152,7 +232,7 @@ export async function registerRoutes(app: FastifyInstance) {
   const b64urlStr = (buf: Buffer) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
   app.post("/auth/passkey/register-options", async (req, reply) => {
-    if (privyConfigured()) return reply.code(404).send({ error: "fallback-auth-disabled" });
+    if (env.AUTH_PROVIDER !== "fallback") return reply.code(404).send({ error: "fallback-auth-disabled" });
     const body = (req.body ?? {}) as { displayName?: string };
     const displayName = body.displayName?.trim() || "Scout";
     const userHandle = b64urlStr(randomBytes(16));
@@ -172,7 +252,7 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/auth/passkey/register", async (req, reply) => {
-    if (privyConfigured()) return reply.code(404).send({ error: "fallback-auth-disabled" });
+    if (env.AUTH_PROVIDER !== "fallback") return reply.code(404).send({ error: "fallback-auth-disabled" });
     const body = (req.body ?? {}) as { credentialId?: string; clientDataJSON?: string; displayName?: string };
     if (!body.credentialId || !body.clientDataJSON) return reply.code(400).send({ error: "missing fields" });
     const v = verifyClientData(body.clientDataJSON, "webauthn.create", env.RP_ORIGINS);
@@ -197,7 +277,7 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/auth/passkey/login-options", async (_req, reply) => {
-    if (privyConfigured()) return reply.code(404).send({ error: "fallback-auth-disabled" });
+    if (env.AUTH_PROVIDER !== "fallback") return reply.code(404).send({ error: "fallback-auth-disabled" });
     return {
       challenge: issueChallenge(),
       rpId: env.RP_ID,
@@ -208,7 +288,7 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/auth/passkey/login", async (req, reply) => {
-    if (privyConfigured()) return reply.code(404).send({ error: "fallback-auth-disabled" });
+    if (env.AUTH_PROVIDER !== "fallback") return reply.code(404).send({ error: "fallback-auth-disabled" });
     const body = (req.body ?? {}) as { credentialId?: string; clientDataJSON?: string };
     if (!body.credentialId || !body.clientDataJSON) return reply.code(400).send({ error: "missing fields" });
     const v = verifyClientData(body.clientDataJSON, "webauthn.get", env.RP_ORIGINS);
@@ -479,9 +559,12 @@ export async function registerRoutes(app: FastifyInstance) {
     const stream = await Streams.byId(id);
     if (!stream) return reply.code(404).send({ error: "not found" });
     if (stream.creatorId !== user.id) return reply.code(403).send({ error: "creator-only" });
+    const postRollMs = await manualClipPostRollRemainingMs(id);
+    if (postRollMs > 0) await new Promise((resolve) => setTimeout(resolve, postRollMs));
     const recording = await Streams.recording(id);
     await stopStreamRecording(recording?.egressId ?? null);
     await Streams.end(id);
+    hub.broadcastStream("feed", { t: "feed" });
     return { ok: true, endedAt: Date.now() };
   });
 
@@ -631,7 +714,7 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   // ---------- tips ----------
-  // The client signs this transaction through the user's Privy wallet. The backend never
+  // The client signs this transaction with the user's Mera passkey account. The backend never
   // spends settler funds on a user's behalf.
   app.post("/streams/:id/tip", async (req, reply) => {
     const user = await bearer(req);
@@ -656,6 +739,24 @@ export async function registerRoutes(app: FastifyInstance) {
     };
   });
 
+  // Announce a confirmed tip to the room instantly (the indexer catches up later). Verified
+  // against the onchain receipt: sent by this user to MomentRewards, and it succeeded.
+  app.post("/streams/:id/tip/confirmed", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const { id } = req.params as { id: string };
+    const { txHash } = (req.body ?? {}) as { txHash?: string };
+    const chain = getChain();
+    if (!chain.enabled || !chain.provider || !chain.contract || !txHash) return reply.code(400).send({ error: "invalid-tip" });
+    const [tx, receipt] = await Promise.all([chain.provider.getTransaction(txHash), chain.provider.getTransactionReceipt(txHash)]);
+    const contract = String(chain.contract.target).toLowerCase();
+    if (!tx || !receipt || receipt.status !== 1 || tx.to?.toLowerCase() !== contract || tx.from.toLowerCase() !== user.walletAddress.toLowerCase()) {
+      return reply.code(409).send({ error: "tip-not-confirmed" });
+    }
+    hub.broadcastStream(id, { t: "tip", streamId: id, from: user.displayName, amountUsd: usd(tx.value), txHash });
+    return { ok: true };
+  });
+
   // ---------- manual clip ("Clip it") — does NOT grant Founding Curator status ----------
   app.post("/streams/:id/clip", async (req, reply) => {
     const user = await bearer(req);
@@ -663,15 +764,56 @@ export async function registerRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const stream = await Streams.byId(id);
     if (!stream) return reply.code(404).send({ error: "not found" });
-    const body = (req.body ?? {}) as { clientStreamTimeMs?: number };
-    const at = Number(body.clientStreamTimeMs ?? streamTimeMs(stream.startedAt, Date.now()));
-    const startSec = Math.max(0, at / 1000 - config.clip.preRollSec);
-    const endSec = startSec + config.clip.preRollSec + config.clip.postRollSec;
-    // Manual clip is a shareable view of the source range; not a rewarded Moment.
-    return {
-      ok: true,
-      clip: { url: `${stream.videoUrl}#t=${startSec.toFixed(1)},${endSec.toFixed(1)}`, durationSec: config.clip.preRollSec + config.clip.postRollSec },
-    };
+    const body = (req.body ?? {}) as { clientStreamTimeMs?: number; browserRecording?: boolean };
+    const now = Date.now();
+    const clientTime = Number(body.clientStreamTimeMs);
+    const at = reconcileStreamTime(
+      Number.isFinite(clientTime) ? clientTime : streamTimeMs(stream.startedAt, now),
+      stream.startedAt,
+      now
+    );
+    try {
+      const moment = await requestManualClip(id, at, body.browserRecording === true);
+      const upload = body.browserRecording === true && await claimClipUpload(moment.id, user.id);
+      return {
+        ok: true,
+        momentId: moment.id,
+        upload,
+        clip: {
+          url: moment.clip.url,
+          durationSec: moment.clip.durationSec,
+          ready: moment.clip.ready,
+          manual: true,
+        },
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message === "stream-not-live") return reply.code(409).send({ error: error.message });
+      if (error instanceof Error && error.message === "recording-not-available") return reply.code(503).send({ error: error.message });
+      throw error;
+    }
+  });
+
+  // ---------- browser-recorded Moment clips ----------
+  // A web client that captured the Moment in its rolling buffer asks to upload; first claim wins.
+  app.post("/moments/:id/clip-claim", async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const { id } = req.params as { id: string };
+    return { upload: clipUploadConfigured() && await claimClipUpload(id, user.id) };
+  });
+
+  app.post("/moments/:id/clip-video", { bodyLimit: 16_000_000 }, async (req, reply) => {
+    const user = await bearer(req);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    const { id } = req.params as { id: string };
+    const { start, end } = req.query as { start?: string; end?: string };
+    const contentType = String(req.headers["content-type"] ?? "").split(";")[0]!.trim();
+    const bytes = req.body as unknown;
+    if (!Buffer.isBuffer(bytes) || bytes.length < 1) return reply.code(400).send({ error: "invalid-clip" });
+    if (!await claimClipUpload(id, user.id)) return reply.code(409).send({ error: "clip-not-claimed" });
+    const url = await uploadMomentClipVideo(id, bytes, contentType);
+    await attachClipVideo(id, user.id, url, Number(start) || 0, Number(end) || 35);
+    return reply.code(201).send({ ok: true, url });
   });
 
   // ---------- development-only demo controls ----------
@@ -716,9 +858,11 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!user) return reply.code(401).send({ error: "unauthorized" });
     const entries = (await Moments.curatorMomentsFor(user.id)).sort((a, b) => (b.moment.confirmedAt ?? 0) - (a.moment.confirmedAt ?? 0));
     let total = 0n;
+    let pending = 0n;
     let firstFinds = 0;
-    for (const { curator } of entries) {
-      total += curator.rewardUnits;
+    for (const { moment, curator } of entries) {
+      if (isPaid(moment.settlement)) total += curator.rewardUnits;
+      else pending += curator.rewardUnits;
       if (curator.rank === 1) firstFinds++;
     }
     // Batch the stream titles + creators (instead of a full momentView per entry).
@@ -738,6 +882,9 @@ export async function registerRoutes(app: FastifyInstance) {
     return {
       totalUnits: total.toString(),
       totalUsd: usd(total),
+      totalMon: mon(total),
+      pendingUnits: pending.toString(),
+      pendingUsd: usd(pending),
       momentsCurated: entries.length,
       firstFinds,
       rewards,
@@ -749,7 +896,11 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!user) return reply.code(401).send({ error: "unauthorized" });
     const moments = await Moments.createdByCreator(user.id);
     let total = 0n;
-    for (const m of moments) total += m.settlement?.creatorAmountUnits ?? 0n;
+    let pending = 0n;
+    for (const m of moments) {
+      if (isPaid(m.settlement)) total += m.settlement!.creatorAmountUnits;
+      else pending += m.settlement?.creatorAmountUnits ?? 0n;
+    }
     const titleById = await streamTitles(moments.map((m) => m.streamId));
     const payouts = moments.map((m) => {
       const amt = m.settlement?.creatorAmountUnits ?? 0n;
@@ -767,6 +918,9 @@ export async function registerRoutes(app: FastifyInstance) {
     return {
       totalUnits: total.toString(),
       totalUsd: usd(total),
+      totalMon: mon(total),
+      pendingUnits: pending.toString(),
+      pendingUsd: usd(pending),
       momentsGenerated: moments.length,
       payouts,
     };
@@ -872,14 +1026,14 @@ export async function registerRoutes(app: FastifyInstance) {
   app.get("/admin/reports", async (req, reply) => {
     const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
-    if (!user.privyId || !env.ADMIN_PRIVY_IDS.includes(user.privyId)) return reply.code(403).send({ error: "admin-only" });
+    if (!isAdmin(user)) return reply.code(403).send({ error: "admin-only" });
     return { reports: await Safety.openReports() };
   });
 
   app.post("/admin/reports/:id/resolve", async (req, reply) => {
     const user = await bearer(req);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
-    if (!user.privyId || !env.ADMIN_PRIVY_IDS.includes(user.privyId)) return reply.code(403).send({ error: "admin-only" });
+    if (!isAdmin(user)) return reply.code(403).send({ error: "admin-only" });
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as { status?: "resolved" | "dismissed" };
     if (body.status !== "resolved" && body.status !== "dismissed") return reply.code(400).send({ error: "invalid-status" });

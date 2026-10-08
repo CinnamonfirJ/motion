@@ -18,6 +18,10 @@ export function watchMs(streamId: string, userId: string, now: number): number {
   return s ? Math.max(0, now - s) : 0;
 }
 
+export function forgetWatch(streamId: string, userId: string): void {
+  starts.delete(key(streamId, userId));
+}
+
 /** Demo/reset: clear watch state for a stream (or everything). */
 export function resetWatch(streamId?: string): void {
   if (!streamId) {

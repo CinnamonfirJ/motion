@@ -33,3 +33,26 @@ test("hub analytics: viewers, peak, unique, and real watch time from sessions", 
   hub.subscribe(c2, stream);
   assert.equal(hub.streamStats(stream).current, 1);
 });
+
+test("hub sends curator celebrations only while the websocket is authenticated", () => {
+  const sent: string[] = [];
+  const socket: SocketLike = { readyState: 1, send(data) { sent.push(data); }, close() {}, on() {} };
+  const conn = hub.add(socket, null);
+  const userId = `curator_${Math.random().toString(36).slice(2)}`;
+  const event = {
+    t: "curator" as const,
+    momentId: "moment",
+    streamId: "stream",
+    rank: 1,
+    rewardUnits: "1",
+    rewardUsd: "$0.00",
+  };
+
+  hub.authenticate(conn, userId);
+  hub.sendToUser(userId, event);
+  assert.equal(sent.length, 1);
+
+  hub.unauthenticate(conn);
+  hub.sendToUser(userId, event);
+  assert.equal(sent.length, 1);
+});

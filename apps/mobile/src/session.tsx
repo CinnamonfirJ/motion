@@ -30,6 +30,7 @@ function useAppSession() {
     await setToken(nextToken);
     setUser(nextUser);
     realtime.connect();
+    realtime.authenticate();
     await realtime.syncClock();
     await flushReactionQueue();
   };
@@ -52,9 +53,11 @@ function FallbackSessionProvider({ children }: { children: ReactNode }) {
         const current = await api.me();
         setUser(current.user);
         realtime.connect();
+        realtime.authenticate();
         await realtime.syncClock();
       } catch {
         await setToken(null);
+        realtime.authenticate();
       } finally {
         setLoading(false);
       }
@@ -75,6 +78,7 @@ function FallbackSessionProvider({ children }: { children: ReactNode }) {
   };
   const logout = async () => {
     await setToken(null);
+    realtime.authenticate();
     setUser(null);
   };
 
@@ -130,10 +134,12 @@ function PrivySessionProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setUser(current.user);
           realtime.connect();
+          realtime.authenticate();
           await realtime.syncClock();
         }
       } catch {
         await setToken(null);
+        realtime.authenticate();
         if (privy.user && !cancelled) await exchange();
       } finally {
         if (!cancelled) setLoading(false);
@@ -162,6 +168,7 @@ function PrivySessionProvider({ children }: { children: ReactNode }) {
   };
   const logout = async () => {
     await setToken(null);
+    realtime.authenticate();
     setUser(null);
     await privy.logout();
   };

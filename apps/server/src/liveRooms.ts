@@ -125,6 +125,7 @@ export const LiveRooms = {
       if (!ended) continue;
       const recording = await Streams.recording(streamId);
       await stopStreamRecording(recording?.egressId ?? null);
+      hub.broadcastStream("feed", { t: "feed" });
       hub.broadcastStream(streamId, { t: "live_room", streamId });
     }
   },

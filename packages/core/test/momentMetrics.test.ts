@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   evaluateUniqueSpike,
+  evaluateConfirmation,
+  hasFreshReactorBurst,
+  evaluateReactorBurst,
   scoreFoundingCurators,
   categoryFromMix,
   buildHistogram,
@@ -33,6 +36,16 @@ describe("evaluateUniqueSpike", () => {
     expect(e.isSpike).toBe(false);
   });
 
+  it("can detect a fresh five-person burst before watch-time accrues", () => {
+    const recent = Array.from({ length: 5 }, (_, i) => sample(`new${i}`, 1, 0));
+    const e = evaluateUniqueSpike(recent, {
+      now: NOW,
+      cfg: { ...SPIKE_CONFIG, minimumWatchSeconds: 0 },
+    });
+    expect(e.uniqueRecent).toBe(5);
+    expect(e.isSpike).toBe(true);
+  });
+
   it("fires when unique eligible reactors clear N_min on a quiet stream", () => {
     const recent = Array.from({ length: SPIKE_CONFIG.minimumUniqueReactors }, (_, i) => sample(`u${i}`, 1));
     const e = evaluateUniqueSpike(recent, { now: NOW });
@@ -61,6 +74,60 @@ describe("evaluateUniqueSpike", () => {
     const e = evaluateUniqueSpike(recent, { now: NOW, cooldownUntil: NOW + 5000 });
     expect(e.isSpike).toBe(false);
     expect(e.reason).toBe("cooldown");
+  });
+});
+
+describe("hasFreshReactorBurst", () => {
+  it("detects five distinct fresh reactors spread across the cold-start window", () => {
+    const recent = Array.from({ length: 5 }, (_, i) => ({
+      userId: `fresh${i}`,
+      serverTimeMs: NOW - i * 2_500,
+      watchMs: 0,
+    }));
+    expect(hasFreshReactorBurst(recent, NOW, 15_000, WATCH_OK, 5)).toBe(true);
+  });
+
+  it("does not count repeat taps or reactions outside the window", () => {
+    const samples = [
+      { userId: "repeat", serverTimeMs: NOW - 1_000, watchMs: 0 },
+      { userId: "repeat", serverTimeMs: NOW - 2_000, watchMs: 0 },
+      { userId: "late", serverTimeMs: NOW - 16_000, watchMs: 0 },
+      { userId: "watched", serverTimeMs: NOW - 3_000, watchMs: WATCH_OK },
+    ];
+    expect(hasFreshReactorBurst(samples, NOW, 15_000, WATCH_OK, 5)).toBe(false);
+  });
+});
+
+describe("evaluateReactorBurst", () => {
+  const opts = { windowMs: 15_000, baselineMs: 60_000, minimumReactors: 5, multiplier: 2 };
+
+  it("fires for the first five Scouts — a mix of fresh and long-watching — tapping seconds apart", () => {
+    const samples: ReactorSample[] = [
+      sample("fresh1", 12, 0),
+      sample("fresh2", 9, 2_000),
+      sample("watched1", 7, 90_000),
+      sample("watched2", 4, 40_000),
+      sample("fresh3", 1, 500),
+    ];
+    const r = evaluateReactorBurst(samples, NOW, opts);
+    expect(r.uniqueRecent).toBe(5);
+    expect(r.isBurst).toBe(true);
+  });
+
+  it("does not fire for four Scouts or one Scout tapping repeatedly", () => {
+    const four = Array.from({ length: 4 }, (_, i) => sample(`u${i}`, i + 1));
+    expect(evaluateReactorBurst(four, NOW, opts).isBurst).toBe(false);
+    const spam = Array.from({ length: 20 }, (_, i) => sample("solo", i * 0.5));
+    expect(evaluateReactorBurst(spam, NOW, opts).isBurst).toBe(false);
+  });
+
+  it("needs more reactors on a stream that is already busy", () => {
+    // 30 distinct users across the prior 45s => 10 per 15s => threshold 20
+    const baseline = Array.from({ length: 30 }, (_, i) => sample(`b${i}`, 16 + i));
+    const recent = Array.from({ length: 6 }, (_, i) => sample(`r${i}`, 1));
+    const r = evaluateReactorBurst([...baseline, ...recent], NOW, opts);
+    expect(r.threshold).toBe(20);
+    expect(r.isBurst).toBe(false);
   });
 });
 
@@ -106,6 +173,28 @@ describe("scoreFoundingCurators", () => {
   it("handles fewer than five eligible users", () => {
     const sel = scoreFoundingCurators([reactor("a"), reactor("b")], start, end);
     expect(sel).toHaveLength(2);
+  });
+
+  it("can select five new viewers who reacted before watch-time accrues", () => {
+    const rs = Array.from({ length: 5 }, (_, i) => reactor(`fresh${i}`, {
+      firstServerTimeMs: start + i,
+      watchMs: 0,
+      reputation: 0,
+    }));
+    expect(scoreFoundingCurators(rs, start, end)).toHaveLength(5);
+  });
+});
+
+describe("cold-start confirmation", () => {
+  it("confirms five distinct first-time reactions without requiring repeat taps", () => {
+    const reactions = Array.from({ length: 5 }, (_, i) => ({
+      userId: `fresh${i}`,
+      walletAddress: `0x${i}`,
+      type: "fire" as const,
+      streamTimeMs: i,
+      serverTimeMs: NOW + i,
+    }));
+    expect(evaluateConfirmation(reactions, { windowMs: 12_000, minTotalReactions: 5, minUniqueReactors: 4 }).confirmed).toBe(true);
   });
 });
 

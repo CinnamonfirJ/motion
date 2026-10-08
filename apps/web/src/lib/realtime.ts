@@ -18,11 +18,10 @@ class Realtime {
 
   connect() {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
-    const token = getToken();
     const ws = new WebSocket(api.wsUrl);
     this.ws = ws;
     ws.onopen = () => {
-      if (token) ws.send(JSON.stringify({ type: "auth", token }));
+      this.authenticate();
       for (const s of this.subscribed) ws.send(JSON.stringify({ type: "subscribe", streamId: s }));
       this.armWatchdog();
     };
@@ -70,6 +69,11 @@ class Realtime {
   unsubscribe(streamId: string) {
     this.subscribed.delete(streamId);
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: "unsubscribe", streamId }));
+  }
+  authenticate() {
+    if (this.ws?.readyState !== WebSocket.OPEN) return;
+    const token = getToken();
+    this.ws.send(JSON.stringify(token ? { type: "auth", token } : { type: "logout" }));
   }
   on(h: Handler): () => void {
     this.handlers.add(h);

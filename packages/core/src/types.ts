@@ -105,6 +105,8 @@ export interface Clip {
   url: string | null;
   /** true once processing finished (or was retried successfully). */
   ready: boolean;
+  /** Manual clips are feed videos, not reward-bearing Moments. */
+  manual?: boolean;
 }
 
 export interface FoundingCurator {
@@ -125,6 +127,8 @@ export interface Settlement {
   momentId: string;
   status: SettlementStatus;
   txHash: string | null;
+  /** True when this settlement was completed locally without a chain transaction. */
+  simulated?: boolean;
   creatorAmountUnits: bigint;
   curatorPoolUnits: bigint;
   totalUnits: bigint;

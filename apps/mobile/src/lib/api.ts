@@ -88,7 +88,7 @@ export interface MomentDTO {
   state: string;
   statusLabel: string;
   isLiveStream: boolean;
-  clip: { startStreamTimeMs: number; endStreamTimeMs: number; durationSec: number; url: string | null; ready: boolean };
+  clip: { startStreamTimeMs: number; endStreamTimeMs: number; durationSec: number; url: string | null; ready: boolean; manual?: boolean };
   metrics: { totalReactions: number; uniqueReactors: number; mix: { fire: number; laugh: number; wow: number }; peakRate: number; peakOffsetSec: number; category: string; histogram: { second: number; fire: number; laugh: number; wow: number }[] };
   creator: { id: string; displayName: string; handle: string; avatarUrl: string | null } | null;
   streamTitle: string;
@@ -214,7 +214,7 @@ export const api = {
   blockUser: (userId: string) => req<{ ok: boolean }>(`/users/${userId}/block`, { method: "POST", body: "{}" }),
   deleteAccount: () => req<{ ok: boolean; onchainDataRetained: boolean }>("/me", { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE" }) }),
   clip: (streamId: string, clientStreamTimeMs: number) =>
-    req<{ ok: boolean; clip: { url: string; durationSec: number } }>(`/streams/${streamId}/clip`, { method: "POST", body: JSON.stringify({ clientStreamTimeMs }) }),
+    req<{ ok: boolean; momentId: string; clip: { url: string | null; durationSec: number; ready: boolean; manual: true } }>(`/streams/${streamId}/clip`, { method: "POST", body: JSON.stringify({ clientStreamTimeMs }) }),
   moments: () => req<{ moments: MomentDTO[] }>("/moments"),
   moment: (id: string) => req<{ moment: MomentDTO }>(`/moments/${id}`),
   scoutEarnings: () => req<{ totalUsd: string; momentsCurated: number; firstFinds: number; rewards: any[] }>("/earnings/scout"),
