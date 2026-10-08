@@ -70,6 +70,7 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
   const [state, setState] = useState<LiveRoomDTO | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [screenAudioNotice, setScreenAudioNotice] = useState<string | null>(null);
   const [nowTs, setNowTs] = useState(Date.now());
   const [bans, setBans] = useState<BanDTO[]>([]);
   const wide = useMediaQuery("(min-width: 1024px)");
@@ -129,6 +130,19 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
     finally { setPending(false); }
   };
 
+  const toggleScreenShare = () => void act(async () => {
+    if (isScreenShareEnabled) {
+      await localParticipant.setScreenShareEnabled(false);
+      setScreenAudioNotice(null);
+      return;
+    }
+    await localParticipant.setScreenShareEnabled(true, { audio: true, contentHint: "motion" });
+    const audio = localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
+    setScreenAudioNotice(audio && !audio.isMuted
+      ? "Tab audio is live for viewers."
+      : "Your screen is live without audio. Stop sharing, then choose a browser tab and enable Share tab audio in the browser prompt.");
+  }, "Screen sharing");
+
   const role = state?.role ?? initialRole;
   const isHost = role === "host";
   const isSpeaker = role === "speaker";
@@ -162,7 +176,7 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
     <div className="flex flex-wrap items-center gap-2">
       <button className={primary} disabled={pending || !speakerPermissionReady} onClick={() => void act(() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled))}>{isMicrophoneEnabled ? "Mute mic" : "Enable mic"}</button>
       {canCamera && <button className={primary} disabled={pending || !speakerPermissionReady} onClick={() => void act(() => localParticipant.setCameraEnabled(!isCameraEnabled), "Camera")}>{isCameraEnabled ? "Camera off" : "Camera on"}</button>}
-      {canScreen && <button className={primary} disabled={pending || !speakerPermissionReady} onClick={() => void act(() => localParticipant.setScreenShareEnabled(!isScreenShareEnabled), "Screen sharing")}>{isScreenShareEnabled ? "Stop sharing" : "Share screen"}</button>}
+      {canScreen && <button className={primary} disabled={pending || !speakerPermissionReady} onClick={toggleScreenShare}>{isScreenShareEnabled ? "Stop sharing" : "Share screen + audio"}</button>}
       {isHost && onEnd && <button className="flex-1 border border-error/60 bg-error/10 px-3 py-2.5 font-mono text-micro uppercase tracking-[0.1em] text-error hover:bg-error/20" onClick={onEnd}>■ End</button>}
     </div>
   );
@@ -263,6 +277,8 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
               </div>
             </div>
             {error && <p role="alert" className={`${S.card} border-error/50 p-3 text-bodysm text-error`}>{error}</p>}
+            {screenAudioNotice && <p role="status" className="border border-border bg-surface1 p-3 text-bodysm text-text-secondary">{screenAudioNotice}</p>}
+            <p className="text-bodysm text-text-secondary">To react to a YouTube video, share its browser tab and select Share tab audio in the browser prompt. Headphones prevent your mic from echoing the video.</p>
             <StartAudio label="Enable stream audio" />
           </aside>
 
@@ -275,14 +291,14 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
                 <span className="inline-flex items-center gap-1.5 bg-error px-2 py-1 font-mono text-micro font-bold uppercase tracking-[0.1em] text-white"><span className="h-1.5 w-1.5 bg-white" />Live</span>
                 <span className="inline-flex items-center gap-1 bg-black/50 px-2 py-1 font-mono text-micro font-semibold text-white backdrop-blur">{I.eye}{live}</span>
               </div>
-              <span className="absolute right-3 top-3 z-10 inline-flex items-center gap-1 bg-black/50 px-2 py-1 font-mono text-micro text-success backdrop-blur">{I.signal}32ms</span>
+              <span className="absolute right-3 top-3 z-10 inline-flex items-center gap-1 bg-black/50 px-2 py-1 font-mono text-micro text-success backdrop-blur">{I.signal}LiveKit connected</span>
             </div>
 
             {/* control bar */}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {ctrlBtn(isMicrophoneEnabled ? I.mic : I.micOff, isMicrophoneEnabled ? "Mute" : "Unmute", () => void act(() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)), { active: isMicrophoneEnabled })}
               {canCamera && ctrlBtn(I.cam, "Camera", () => void act(() => localParticipant.setCameraEnabled(!isCameraEnabled), "Camera"), { active: isCameraEnabled })}
-              {canScreen && ctrlBtn(I.screen, "Share", () => void act(() => localParticipant.setScreenShareEnabled(!isScreenShareEnabled), "Screen sharing"), { active: isScreenShareEnabled })}
+              {canScreen && ctrlBtn(I.screen, "Share + audio", toggleScreenShare, { active: isScreenShareEnabled })}
               {ctrlBtn(I.invite, "Invite Guest", undefined)}
               {ctrlBtn(I.mic, "Mic Requests", undefined, { badge: requested.length || undefined })}
               {ctrlBtn(I.more, "More", undefined)}
@@ -291,6 +307,7 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
                 <span className="inline-flex items-center gap-1.5 border border-border bg-surface1 px-3 py-2 font-mono text-micro font-semibold text-text">{I.users}{live}</span>
               </div>
             </div>
+            {screenAudioNotice && <p role="status" className="mt-3 border border-border bg-surface1 p-3 text-bodysm text-text-secondary">{screenAudioNotice}</p>}
 
             {/* title + meta */}
             <div className="mt-4 flex items-start gap-3">
@@ -401,6 +418,8 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
         {isSpeaker && <button className={`${control} mt-3 w-full`} disabled={pending} onClick={() => void act(() => api.removeSpeaker(streamId, localParticipant.identity))}>Leave speaker seat</button>}
         {hostSections && <div className="mt-5">{hostSections}</div>}
         {error && <p role="alert" className="mt-4 border border-error px-3 py-2 text-bodysm text-error">{error}</p>}
+        {canScreen && <p className="mt-3 text-bodysm text-text-secondary">For video reactions, share the video’s browser tab and enable Share tab audio in the browser prompt. Use headphones to avoid echo.</p>}
+        {screenAudioNotice && <p role="status" className="mt-3 border border-border px-3 py-2 text-bodysm text-text-secondary">{screenAudioNotice}</p>}
         <StartAudio label="Enable stream audio" />
       </aside>
       <RoomAudioRenderer />
@@ -425,5 +444,5 @@ export function LiveKitStage({ streamId, hostId, stream, viewerCount, followerCo
   }, [streamId, attempt]);
   if (error) return <div className="grid h-full place-items-center bg-black text-text-secondary"><div className="text-center"><p>{error}</p><button className={`${control} mt-3`} onClick={() => setAttempt((value) => value + 1)}>Retry room connection</button></div></div>;
   if (!credentials) return <div className="grid h-full place-items-center bg-black text-text-secondary">Joining live…</div>;
-  return <LiveKitRoom token={credentials.token} serverUrl={credentials.url} connect audio={credentials.role === "host"} video={credentials.role === "host"} data-lk-theme="default" className="h-full" onError={(cause) => setError(cause.message)}><RoomStage streamId={streamId} hostId={hostId} initialRole={credentials.role} stream={stream} viewerCount={viewerCount} followerCount={followerCount} onEnd={onEnd} /></LiveKitRoom>;
+  return <LiveKitRoom token={credentials.token} serverUrl={credentials.url} connect audio={credentials.role === "host"} video={credentials.role === "host"} options={{ adaptiveStream: true, dynacast: true }} data-lk-theme="default" className="h-full" onError={(cause) => setError(cause.message)}><RoomStage streamId={streamId} hostId={hostId} initialRole={credentials.role} stream={stream} viewerCount={viewerCount} followerCount={followerCount} onEnd={onEnd} /></LiveKitRoom>;
 }
