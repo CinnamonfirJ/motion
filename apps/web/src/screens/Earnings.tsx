@@ -38,6 +38,11 @@ export function Earnings() {
         <span className="plusmark -right-[6px] -top-[6px]" />
         <p className="text-display tabular-nums">{data.totalUsd}</p>
         <p className="eyebrow text-micro text-text-muted mt-1">{mode === "scout" ? "Total earned" : "Creator earnings"}</p>
+        {data.totalMon && (
+          <p className="mt-1 font-mono text-micro text-text-secondary">
+            {data.totalMon} paid onchain{data.pendingUsd && data.pendingUsd !== "$0.00" ? ` · ${data.pendingUsd} settling` : ""}
+          </p>
+        )}
         <div className="mt-4 grid grid-cols-2 gap-3">
           {mode === "scout" ? (
             <>

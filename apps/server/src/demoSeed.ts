@@ -278,7 +278,8 @@ function buildMoment(opts: {
   const settlement: Settlement = {
     momentId: id,
     status: "confirmed",
-    txHash: `0x${newId("").replace(/[^a-f0-9]/gi, "").padEnd(64, "0").slice(0, 64)}`,
+    txHash: null,
+    simulated: true,
     creatorAmountUnits: dist.creatorUnits,
     curatorPoolUnits: dist.curatorPoolUnits,
     totalUnits: dist.totalUnits,
@@ -346,6 +347,7 @@ async function runSeed(opts: { targetHandle: string; reset?: boolean }): Promise
     [handle]
   );
   if (!targetRow) throw new Error("target-not-found");
+  const targetAuthId = String(targetRow.authId ?? targetRow.authid);
   const target = {
     id: String(targetRow.id ?? targetRow.ID),
     handle: String(targetRow.handle),

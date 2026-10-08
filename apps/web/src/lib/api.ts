@@ -92,6 +92,7 @@ export interface ClipDTO {
   durationSec: number;
   url: string | null;
   ready: boolean;
+  manual?: boolean;
 }
 export interface CuratorDTO {
   userId: string;
@@ -107,6 +108,8 @@ export interface SettlementDTO {
   status: "pending" | "submitted" | "confirmed" | "failed";
   txHash: string | null;
   explorerUrl: string | null;
+  monadScanUrl: string | null;
+  monadVisionUrl: string | null;
   network: string;
   onchain: boolean;
   creatorAmountUsd: string;
@@ -280,10 +283,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ email, provider, displayName }),
     }),
-  privy: (accessToken: string, displayName?: string) =>
-    req<{ token: string; user: UserDTO }>("/auth/privy", {
+  config: () =>
+    req<{ auth: string; chain: string; monadChainId: number; momentRewardsAddress: string | null }>("/config"),
+  meraChallenge: () => req<{ message: string }>("/auth/mera/challenge", { method: "POST", body: "{}" }),
+  mera: (message: string, signature: string, displayName?: string) =>
+    req<{ token: string; user: UserDTO }>("/auth/mera", {
       method: "POST",
-      body: JSON.stringify({ accessToken, displayName }),
+      body: JSON.stringify({ message, signature, displayName }),
     }),
   me: () => req<{ user: UserDTO; wallet: { address: string; network: string; onchain: boolean } }>("/me"),
   updateProfile: (input: { displayName?: string; handle?: string; avatarUrl?: string | null }) =>
@@ -361,11 +367,28 @@ export const api = {
     req<{ reportId: string; status: string }>("/reports", { method: "POST", body: JSON.stringify({ targetType, targetId, reason, details }) }),
   blockUser: (userId: string) => req<{ ok: boolean }>(`/users/${userId}/block`, { method: "POST", body: "{}" }),
   deleteAccount: () => req<{ ok: boolean; onchainDataRetained: boolean }>("/me", { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE" }) }),
-  clip: (streamId: string, clientStreamTimeMs: number) =>
-    req<{ ok: boolean; clip: { url: string; durationSec: number } }>(`/streams/${streamId}/clip`, {
+  clip: (streamId: string, clientStreamTimeMs: number, browserRecording = false) =>
+    req<{ ok: boolean; momentId: string; upload?: boolean; clip: { url: string | null; durationSec: number; ready: boolean; manual: true } }>(`/streams/${streamId}/clip`, {
       method: "POST",
-      body: JSON.stringify({ clientStreamTimeMs }),
+      body: JSON.stringify({ clientStreamTimeMs, browserRecording }),
     }),
+  tipConfirmed: (streamId: string, txHash: string) =>
+    req<{ ok: boolean }>(`/streams/${streamId}/tip/confirmed`, { method: "POST", body: JSON.stringify({ txHash }) }),
+  clipClaim: (momentId: string) => req<{ upload: boolean }>(`/moments/${momentId}/clip-claim`, { method: "POST", body: "{}" }),
+  // Raw bytes of a browser-recorded clip; start/end trim it to the 35s Moment window.
+  uploadClipVideo: async (momentId: string, blob: Blob, startSec: number, endSec: number): Promise<{ ok: boolean; url: string }> => {
+    const query = new URLSearchParams({ start: startSec.toFixed(2), end: endSec.toFixed(2) });
+    const res = await fetch(`${API}/moments/${momentId}/clip-video?${query}`, {
+      method: "POST",
+      headers: { "Content-Type": blob.type || "video/webm", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: blob,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, (body as any).error || res.statusText);
+    }
+    return res.json();
+  },
   demo: {
     crowd: () => req<{ crowd: { id: string; displayName: string }[]; label: string }>("/demo/crowd"),
     forceSpike: (streamId: string) => req<{ ok: boolean; reactionsSent: number }>("/demo/force-spike", { method: "POST", body: JSON.stringify({ streamId }) }),
@@ -377,10 +400,12 @@ export const api = {
   scoutEarnings: () =>
     req<{
       totalUsd: string;
+      totalMon?: string;
+      pendingUsd?: string;
       momentsCurated: number;
       firstFinds: number;
       rewards: any[];
     }>("/earnings/scout"),
   creatorEarnings: () =>
-    req<{ totalUsd: string; momentsGenerated: number; payouts: any[] }>("/earnings/creator"),
+    req<{ totalUsd: string; totalMon?: string; pendingUsd?: string; momentsGenerated: number; payouts: any[] }>("/earnings/creator"),
 };

@@ -33,7 +33,56 @@ export interface UniqueSpikeContext {
   now: number;
   /** Server time until which detection is suppressed (30s cooldown after a Moment). */
   cooldownUntil?: number;
-  cfg?: typeof SPIKE_CONFIG;
+  cfg?: { [K in keyof typeof SPIKE_CONFIG]: number };
+}
+
+/** True when enough distinct fresh viewers react inside the cold-start burst window. */
+export function hasFreshReactorBurst(
+  samples: ReactorSample[],
+  now: number,
+  windowMs: number,
+  minimumWatchMs: number,
+  minimumReactors: number
+): boolean {
+  const reactors = new Set(
+    samples
+      .filter((sample) =>
+        sample.watchMs < minimumWatchMs
+        && sample.serverTimeMs >= now - windowMs
+        && sample.serverTimeMs <= now
+      )
+      .map((sample) => sample.userId)
+  );
+  return reactors.size >= minimumReactors;
+}
+
+export interface ReactorBurstResult {
+  isBurst: boolean;
+  uniqueRecent: number;
+  threshold: number;
+}
+
+/**
+ * Early-reactor burst: distinct reactors (ANY watch time) inside the last `windowMs`, versus
+ * the stream's normal distinct-reactor rate over the preceding baseline. Lets "the first five
+ * Scouts who tapped" surface a Moment even when they tap a few seconds apart or a mix of new
+ * and long-watching viewers react — cases the strict 5s eligible-only spike misses.
+ */
+export function evaluateReactorBurst(
+  samples: ReactorSample[],
+  now: number,
+  opts: { windowMs: number; baselineMs: number; minimumReactors: number; multiplier: number }
+): ReactorBurstResult {
+  const recent = new Set<string>();
+  const baseline = new Set<string>();
+  for (const s of samples) {
+    if (s.serverTimeMs > now) continue;
+    if (s.serverTimeMs >= now - opts.windowMs) recent.add(s.userId);
+    else if (s.serverTimeMs >= now - opts.baselineMs) baseline.add(s.userId);
+  }
+  const windows = Math.max(1, (opts.baselineMs - opts.windowMs) / opts.windowMs);
+  const threshold = Math.max(opts.minimumReactors, Math.ceil(opts.multiplier * (baseline.size / windows)));
+  return { isBurst: recent.size >= threshold, uniqueRecent: recent.size, threshold };
 }
 
 export function evaluateUniqueSpike(samples: ReactorSample[], ctx: UniqueSpikeContext): UniqueSpikeResult {

@@ -1,4 +1,5 @@
 import type { ReactionType } from "@ennoia/core";
+import { forgetWatch, noteWatch } from "./watch.js";
 
 /** Minimal structural type for a ws WebSocket (avoids depending on @types/ws). */
 export interface SocketLike {
@@ -21,13 +22,14 @@ export type ServerEvent =
   | { t: "moment_detected"; streamId: string; momentId: string; spikeStreamTimeMs: number }
   | { t: "curator"; momentId: string; rank: number; rewardUnits: string; rewardUsd: string; streamId: string }
   | { t: "settlement"; momentId: string; status: string; txHash: string | null }
+  | { t: "tip"; streamId: string; from: string; amountUsd: string; txHash: string }
   | { t: "viewers"; streamId: string; count: number }
   | { t: "live_room"; streamId: string }
   | { t: "chat"; streamId: string; serverBroadcastAt?: number; message: { id: string; body: string; createdAt: number; clientId?: string; author: { id: string; displayName: string; handle: string; avatarUrl: string | null } } }
   | { t: "chat_deleted"; streamId: string; messageId: string }
   | { t: "moderation"; streamId: string; userId: string; banned: boolean }
   | { t: "ping"; serverTime: number }
-  | { t: "feed"; postId: string };
+  | { t: "feed"; postId?: string; momentId?: string };
 
 interface Conn {
   ws: SocketLike;
@@ -65,9 +67,16 @@ class Hub {
 
   private remove(conn: Conn): void {
     const streams = [...conn.streams];
-    for (const s of streams) this.endSession(conn, s);
-    conn.streams.clear();
     this.conns.delete(conn);
+    for (const s of streams) this.endSession(conn, s);
+    if (conn.userId) {
+      for (const streamId of streams) {
+        if (![...this.conns].some((other) => other.userId === conn.userId && other.streams.has(streamId))) {
+          forgetWatch(streamId, conn.userId);
+        }
+      }
+    }
+    conn.streams.clear();
     for (const s of streams) this.broadcastViewerCount(s);
   }
 
@@ -103,7 +112,7 @@ class Hub {
     for (const c of this.conns) {
       if (now - c.lastSeen > STALE_MS) {
         try { c.ws.close(4000, "stale"); } catch { /* ignore */ }
-        this.conns.delete(c);
+        this.remove(c);
         continue;
       }
       this.safeSend(c, payload);
@@ -111,17 +120,43 @@ class Hub {
   }
 
   authenticate(conn: Conn, userId: string): void {
+    const previousUserId = conn.userId;
+    if (previousUserId && previousUserId !== userId) {
+      for (const streamId of conn.streams) {
+        if (![...this.conns].some((other) => other !== conn && other.userId === previousUserId && other.streams.has(streamId))) {
+          forgetWatch(streamId, previousUserId);
+        }
+      }
+    }
     conn.userId = userId;
     conn.lastSeen = Date.now();
-    for (const s of conn.streams) this.streamMeta.get(s)?.unique.add(userId); // count late auth
+    for (const s of conn.streams) {
+      this.streamMeta.get(s)?.unique.add(userId); // count late auth
+      noteWatch(s, userId, conn.lastSeen);
+    }
+  }
+
+  unauthenticate(conn: Conn): void {
+    const userId = conn.userId;
+    if (!userId) return;
+    conn.userId = null;
+    for (const streamId of conn.streams) {
+      if (![...this.conns].some((other) => other !== conn && other.userId === userId && other.streams.has(streamId))) {
+        forgetWatch(streamId, userId);
+      }
+    }
   }
 
   subscribe(conn: Conn, streamId: string) {
     if (conn.streams.has(streamId)) return; // idempotent — one session per (conn, stream)
     conn.streams.add(streamId);
     const m = this.meta(streamId);
-    m.sessions.set(conn, Date.now());
-    if (conn.userId) m.unique.add(conn.userId);
+    const joinedAt = Date.now();
+    m.sessions.set(conn, joinedAt);
+    if (conn.userId) {
+      m.unique.add(conn.userId);
+      noteWatch(streamId, conn.userId, joinedAt);
+    }
     const current = this.viewerCount(streamId);
     if (current > m.peak) m.peak = current;
     this.broadcastViewerCount(streamId);
@@ -131,6 +166,9 @@ class Hub {
     if (!conn.streams.has(streamId)) return;
     conn.streams.delete(streamId);
     this.endSession(conn, streamId);
+    if (conn.userId && ![...this.conns].some((other) => other.userId === conn.userId && other.streams.has(streamId))) {
+      forgetWatch(streamId, conn.userId);
+    }
     this.broadcastViewerCount(streamId);
   }
 

@@ -5,9 +5,13 @@ import {
   type Settlement,
   type FoundingCurator,
 } from "@ennoia/core";
-import { getChain, momentIdHash } from "./chain.js";
-import { env } from "./env.js";
 import { ethers } from "ethers";
+import { getChain, momentIdHash, submitSettlerTx } from "./chain.js";
+import { env } from "./env.js";
+
+/** A payable, non-zero EVM address. */
+const isPayable = (a: string | null | undefined): a is string =>
+  !!a && ethers.isAddress(a) && a.toLowerCase() !== ethers.ZeroAddress;
 
 export interface SettlementOutcome {
   settlement: Settlement;
@@ -33,19 +37,28 @@ export async function settleMoment(
   cfg: MomentConfig,
   creatorWalletAddress: string
 ): Promise<SettlementOutcome> {
+  // Only payable wallets can receive on-chain. An invalid/zero curator address used to make the
+  // whole transaction throw and retry forever, so nobody (creator included) got paid. Ranks stay
+  // as frozen at confirmation; the curator pool is split across the payable curators.
   const curators = [...moment.foundingCurators].sort((a, b) => a.rank - b.rank);
+  const payable = curators.filter((c) => isPayable(c.walletAddress));
+  if (payable.length !== curators.length) {
+    console.warn(`[settlement] ${moment.id}: ${curators.length - payable.length} curator(s) without a payable wallet were skipped`);
+  }
   const pool = cfg.reward.defaultPoolUnits;
-  const dist = distributeReward(pool, curators.length, cfg.reward, cfg.curator);
+  const dist = distributeReward(pool, payable.length, cfg.reward, cfg.curator);
+  const payableReward = new Map(payable.map((c, i) => [c.userId, dist.curatorUnits[i] ?? 0n]));
 
-  const curatorsWithReward: FoundingCurator[] = curators.map((c, i) => ({
+  const curatorsWithReward: FoundingCurator[] = curators.map((c) => ({
     ...c,
-    rewardUnits: dist.curatorUnits[i] ?? 0n,
+    rewardUnits: payableReward.get(c.userId) ?? 0n,
   }));
 
   const base: Settlement = {
     momentId: moment.id,
     status: "pending",
     txHash: moment.settlement?.txHash ?? null,
+    simulated: false,
     creatorAmountUnits: dist.creatorUnits,
     curatorPoolUnits: dist.curatorPoolUnits,
     totalUnits: dist.totalUnits,
@@ -56,14 +69,13 @@ export async function settleMoment(
 
   const chain = getChain();
   const idHash = momentIdHash(moment.id);
-  const curatorAddresses = curatorsWithReward.map((c) => c.walletAddress);
-  const curatorAmounts = curatorsWithReward.map((c) => c.rewardUnits);
+  const curatorAddresses = payable.map((c) => c.walletAddress);
+  const curatorAmounts = payable.map((c) => payableReward.get(c.userId) ?? 0n);
 
   if (!chain.enabled || !chain.contract) {
-    // Honest local simulation — deterministic pseudo-hash, idempotent by construction.
-    const simHash = ethers.keccak256(ethers.toUtf8Bytes(`sim:${moment.id}`));
+    // Local simulation must never masquerade as a public-chain transaction.
     return {
-      settlement: { ...base, status: "confirmed", txHash: simHash, confirmedAt: Date.now() },
+      settlement: { ...base, status: "confirmed", txHash: null, simulated: true, confirmedAt: Date.now() },
       curators: curatorsWithReward,
       simulated: true,
     };
@@ -81,17 +93,29 @@ export async function settleMoment(
       };
     }
 
-    const platformAddress = env.PLATFORM_ADDRESS || (await (chain.contract as any).runner?.getAddress?.()) || creatorWalletAddress;
+    if (!isPayable(creatorWalletAddress)) {
+      console.error(`[settlement] ${moment.id}: creator ${moment.creatorId} has no payable wallet (${creatorWalletAddress || "empty"})`);
+      return {
+        settlement: { ...base, status: "failed", error: "Creator wallet unavailable." },
+        curators: curatorsWithReward,
+        simulated: false,
+      };
+    }
+
+    const settlerAddress = await chain.signer?.getAddress();
+    const platformAddress = isPayable(env.PLATFORM_ADDRESS) ? env.PLATFORM_ADDRESS : (settlerAddress ?? creatorWalletAddress);
     // Resending after a transient failure is safe: the contract reverts AlreadySettled.
     const tx: ethers.ContractTransactionResponse = await withRpcRetry("settleMoment", () =>
-      contract.settleMoment(
-        idHash,
-        creatorWalletAddress,
-        dist.creatorUnits,
-        platformAddress,
-        dist.platformUnits,
-        curatorAddresses,
-        curatorAmounts
+      submitSettlerTx(() =>
+        contract.settleMoment(
+          idHash,
+          creatorWalletAddress,
+          dist.creatorUnits,
+          platformAddress,
+          dist.platformUnits,
+          curatorAddresses,
+          curatorAmounts
+        )
       )
     );
     console.log(`[settlement] ${moment.id} submitted tx=${tx.hash}`);
@@ -119,6 +143,7 @@ export async function settleMoment(
         simulated: false,
       };
     }
+    console.error(`[settlement] ${moment.id} failed: ${msg}`);
     return {
       settlement: { ...base, status: "failed", error: friendlyError(msg) },
       curators: curatorsWithReward,

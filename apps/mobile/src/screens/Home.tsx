@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, ScrollView, Pressable, Image, RefreshControl, FlatList, TextInput } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { api, type FeedItemDTO, type CommunityDTO, type MomentDTO, type StreamDTO } from "../lib/api";
+import { realtime } from "../lib/realtime";
 import { Avatar, Pill, EmptyState, ReactionGraph, ReactionMix, SectionIndex } from "../components/ui";
 import { color, type, radius, eyebrow } from "../theme";
 import { PostCard } from "../components/post-card";
@@ -67,8 +68,17 @@ export function Home() {
   }, [mode, selectedCommunity]);
   useFocusEffect(useCallback(() => {
     void load();
+    realtime.connect();
+    realtime.subscribe("feed");
+    const off = realtime.on((event) => {
+      if (event.t === "feed") void load();
+    });
     const timer = setInterval(() => void load(), 60_000);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      off();
+      realtime.unsubscribe("feed");
+    };
   }, [load]));
   useEffect(() => { void api.communities().then((result) => setCommunities(result.communities)).catch(() => setCommunityError("Could not load communities.")); }, []);
   useEffect(() => {
@@ -156,7 +166,7 @@ export function MomentCard({ moment, onPress }: { moment: MomentDTO; onPress: ()
       <View style={{ padding: 16, gap: 12 }}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <View style={{ borderWidth: 1, borderColor: "rgba(140,100,255,0.4)", backgroundColor: "rgba(140,100,255,0.1)", paddingHorizontal: 8, paddingVertical: 4 }}>
-            <Text style={{ ...eyebrow(11), color: color.lime }}>🔥 Moment · {moment.metrics.category}</Text>
+            <Text style={{ ...eyebrow(11), color: color.lime }}>{moment.clip.manual ? "✂ Saved clip" : `🔥 Moment · ${moment.metrics.category}`}</Text>
           </View>
           {moment.foundingCuratorCount > 0 ? (
             <View style={{ borderWidth: 1, borderColor: "rgba(240,220,160,0.4)", backgroundColor: "rgba(240,220,160,0.1)", paddingHorizontal: 8, paddingVertical: 4 }}>

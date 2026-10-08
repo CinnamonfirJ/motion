@@ -49,6 +49,20 @@ export const CURATOR_SCORE_CONFIG = {
   maxFoundingCurators: 5,
 } as const;
 
+/**
+ * Early-reactor burst rules (PRD §15/§17): the first five distinct Scouts reacting close
+ * together surface a Moment and become its Founding Curators — whether they joined seconds
+ * ago or have been watching for a while. Stream-relative: a busy stream needs
+ * `burstMultiplier` × its normal unique-reactor rate (per burst window) to fire.
+ */
+export const COLD_START_CONFIG = {
+  gracePeriodMs: 15_000,
+  reactionBurstWindowMs: 15_000,
+  minimumFreshReactors: 5,
+  confirmationReactions: 5,
+  burstMultiplier: 2,
+} as const;
+
 // ---------------------------------------------------------------------------
 // MOMENT_SUCCESS_CONFIG — when a Moment becomes eligible for settlement.
 // In DEMO_MODE the threshold is intended to resolve in ~10s so the loop is visible.
@@ -67,8 +81,8 @@ export const MOMENT_SUCCESS_CONFIG = {
 // ---------------------------------------------------------------------------
 export const REWARD_SPLIT = {
   creator: 70,
-  curators: 20,
-  platform: 10,
+  curators: 30,
+  platform: 0,
 } as const;
 
 // ---------------------------------------------------------------------------

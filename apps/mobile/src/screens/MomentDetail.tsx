@@ -102,17 +102,49 @@ export function MomentDetail() {
           <Pressable onPress={() => setShowReceipt((v) => !v)}>
             <Text style={{ color: color.electric, ...eyebrow(11) }}>{showReceipt ? "Hide" : "View"} onchain receipt</Text>
           </Pressable>
+          {s.onchain ? (
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {s.monadScanUrl ? (
+                <Pressable
+                  onPress={() => Linking.openURL(s.monadScanUrl)}
+                  style={{ flex: 1, borderWidth: 1, borderColor: color.electric, paddingVertical: 8, paddingHorizontal: 12, alignItems: "center" }}
+                >
+                  <Text style={{ color: color.electric, ...eyebrow(11) }}>View on MonadScan ↗</Text>
+                </Pressable>
+              ) : null}
+              {s.monadVisionUrl ? (
+                <Pressable
+                  onPress={() => Linking.openURL(s.monadVisionUrl)}
+                  style={{ flex: 1, borderWidth: 1, borderColor: color.lime, paddingVertical: 8, paddingHorizontal: 12, alignItems: "center" }}
+                >
+                  <Text style={{ color: color.lime, ...eyebrow(11) }}>View on MonadVision ↗</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
           {showReceipt ? (
             <View style={{ backgroundColor: color.surface2, borderRadius: radius.sm, padding: 12, gap: 6 }}>
               <Row k="Network" v={s.network} />
               <Row k="Status" v={s.status === "confirmed" ? "Confirmed" : s.status} />
               <Row k="Transaction" v={s.txHash ? `${s.txHash.slice(0, 8)}…${s.txHash.slice(-4)}` : "—"} />
               <Row k="Mode" v={s.onchain ? "Onchain" : "Simulation"} />
-              {s.explorerUrl ? (
-                <Pressable onPress={() => Linking.openURL(s.explorerUrl)}>
-                  <Text style={{ color: color.electric, ...type.bodysm }}>Open in explorer →</Text>
-                </Pressable>
-              ) : null}
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16, paddingTop: 4 }}>
+                {s.monadScanUrl ? (
+                  <Pressable onPress={() => Linking.openURL(s.monadScanUrl)}>
+                    <Text style={{ color: color.electric, ...type.bodysm }}>MonadScan ↗</Text>
+                  </Pressable>
+                ) : null}
+                {s.monadVisionUrl ? (
+                  <Pressable onPress={() => Linking.openURL(s.monadVisionUrl)}>
+                    <Text style={{ color: color.lime, ...type.bodysm }}>MonadVision ↗</Text>
+                  </Pressable>
+                ) : null}
+                {s.explorerUrl ? (
+                  <Pressable onPress={() => Linking.openURL(s.explorerUrl)}>
+                    <Text style={{ color: color.textMuted, ...type.bodysm }}>Monad Explorer ↗</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
           ) : null}
         </View>

@@ -19,6 +19,10 @@ import {
   type ReactionType,
 } from "../components/live";
 import { useSession } from "../state/session";
+import { SigningBadge } from "../components/SigningSession";
+import { describeMeraError } from "../lib/mera";
+import { isMeraError } from "@category-labs/mera";
+import { ClipRecorder, type CapturedClip } from "../lib/clipRecorder";
 
 const chip =
   "inline-flex items-center gap-1.5 border border-border bg-surface2 px-3 py-1.5 font-mono text-micro uppercase tracking-[0.1em] text-text-secondary transition-colors hover:text-text hover:border-borderStrong disabled:opacity-40";
@@ -55,6 +59,31 @@ export function Live() {
   const { sendTransaction, user } = useSession();
 
   const isCreator = !!stream?.creator?.id && stream.creator.id === user?.id;
+
+  // Rolling browser recording of a LiveKit stream: produces the 35s clip for detected Moments
+  // and the Clip button (server-side Egress recording is not available).
+  const stageRef = useRef<HTMLDivElement>(null);
+  const recorder = useRef<ClipRecorder | null>(null);
+  const recording = stream?.mode === "livekit" && !!user && ClipRecorder.supported();
+  useEffect(() => {
+    if (!recording) return;
+    const r = new ClipRecorder(() => stageRef.current);
+    recorder.current = r;
+    r.start();
+    return () => { r.stop(); recorder.current = null; };
+  }, [recording, id]);
+
+  const saveClip = async (momentId: string, pending: Promise<CapturedClip>, claimed: boolean): Promise<boolean> => {
+    const captured = await pending;
+    if (!claimed && !(await api.clipClaim(momentId)).upload) return false;
+    await api.uploadClipVideo(momentId, captured.blob, captured.startSec, captured.endSec);
+    return true;
+  };
+  const captureMoment = useRef<(momentId: string) => void>(() => {});
+  captureMoment.current = (momentId: string) => {
+    const pending = recorder.current?.capture();
+    if (pending) void saveClip(momentId, pending, false).catch(() => {});
+  };
 
   // Load stream + clock sync.
   useEffect(() => {
@@ -110,6 +139,10 @@ export function Live() {
           break;
         case "moment_detected":
           setDetecting(true);
+          captureMoment.current(ev.momentId);
+          break;
+        case "tip":
+          setToast(`${ev.from} tipped ${ev.amountUsd} on Monad`);
           break;
         case "moment":
           if (ev.state === "CONFIRMED" || ev.state === "CLIPPING" || ev.state === "SETTLING") setForming(true);
@@ -166,16 +199,39 @@ export function Live() {
   };
 
   const endLive = async () => {
+    setToast("Finishing queued clips before ending the stream…");
     try { await api.endStream(id); nav("/"); } catch { setToast("Couldn't end the stream. Try again in a moment."); }
   };
 
   const tip = async () => {
-    try { const r = await api.tip(id); await sendTransaction(r.transaction); setToast(`Tip sent · ${r.amountUsd}`); }
-    catch { setToast("Your tip needs a moment — still going through."); }
+    setToast("Sending tip on Monad…");
+    try {
+      const r = await api.tip(id);
+      const hash = await sendTransaction(r.transaction);
+      setToast(`Tip confirmed on Monad · ${r.amountUsd}`);
+      void api.tipConfirmed(id, hash).catch(() => {});
+    }
+    catch (e: any) {
+      const msg = String(e?.message ?? e);
+      if (isMeraError(e) && e.code === "PASSKEY_OPERATION_FAILED") setToast("Tip cancelled.");
+      else if (describeMeraError(e)) setToast(describeMeraError(e)!);
+      else if (/insufficient.funds/i.test(msg)) setToast("Your account is still being topped up — try again in a few seconds.");
+      else if (/chain-not-configured/.test(msg)) setToast("Tips aren't live on this server yet.");
+      else setToast("Your tip didn't go through. Try again in a moment.");
+    }
   };
   const clip = async () => {
-    try { const s = sync.current; const at = s ? streamTimeMs(s.startedAt, realtime.serverNow()) : 0; await api.clip(id, at); setToast("Clip saved to your finds"); }
-    catch { setToast("Your clip's coming together — one moment."); }
+    const pending = recorder.current?.capture() ?? null;
+    try {
+      const s = sync.current;
+      const at = s ? streamTimeMs(s.startedAt, realtime.serverNow()) : 0;
+      const r = await api.clip(id, at, !!pending);
+      if (!pending || !r.upload) { setToast("35-second clip queued — it will appear on Home shortly."); return; }
+      setToast("Clipping the last 15s + next 20s…");
+      await saveClip(r.momentId, pending, true);
+      setToast("Clip saved — it's on Home now.");
+    }
+    catch { setToast("Couldn't save the clip. Try again in a moment."); }
   };
 
   // ---- loading / error / ended ----
@@ -216,7 +272,7 @@ export function Live() {
   if (studioMode) {
     return (
       <div className="h-[100dvh] bg-night text-text">
-        <LiveKitStage streamId={stream.id} hostId={stream.creator?.id ?? ""} stream={stream} viewerCount={viewerCount} followerCount={followerCount} onEnd={() => void endLive()} />
+        <div ref={stageRef} className="contents"><LiveKitStage streamId={stream.id} hostId={stream.creator?.id ?? ""} stream={stream} viewerCount={viewerCount} followerCount={followerCount} onEnd={() => void endLive()} /></div>
         {detecting && <MomentDetectedOverlay onDone={() => { setDetecting(false); setForming(true); }} />}
         {toast && <RewardToast text={toast} />}
       </div>
@@ -233,7 +289,7 @@ export function Live() {
         {/* ---- MAIN column: video + engagement ---- */}
         <div className="flex min-w-0 flex-1 flex-col lg:min-h-0">
           <div data-theme="dark" className="relative w-full shrink-0 bg-black lg:min-h-0 lg:flex-1" style={{ height: "clamp(220px, 42vh, 560px)" }}>
-            <div className="absolute inset-0 lg:static lg:h-full">{videoNode}</div>
+            <div ref={stageRef} className="absolute inset-0 lg:static lg:h-full">{videoNode}</div>
             <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/50 to-transparent" aria-hidden />
 
             {/* top overlays — kept minimal so they don't compete with the stream */}
@@ -291,6 +347,7 @@ export function Live() {
                 <div className="hidden sm:block"><LivePulse heatingUp={heatingUp} /></div>
               </div>
               <div className="flex items-center gap-2">
+                <SigningBadge className="hidden sm:inline-flex" />
                 <button onClick={() => void tip()} className={chip}>♥ Tip</button>
                 <button onClick={() => void clip()} className={chip}>✂ Clip</button>
                 <button onClick={() => setChatOpen(true)} className={`${chip} lg:hidden`} aria-label="Open live chat">💬 Chat</button>

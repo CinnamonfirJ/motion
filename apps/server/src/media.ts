@@ -122,6 +122,26 @@ function publicObjectUrl(key: string): string {
   return `${env.R2_PUBLIC_BASE_URL}/${key.split("/").map(encodeURIComponent).join("/")}`;
 }
 
+/** R2 alone (no LiveKit Egress) is enough to store browser-recorded Moment clips. */
+export function clipUploadConfigured(): boolean {
+  return Boolean(env.R2_ENDPOINT && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY && env.R2_BUCKET && env.R2_PUBLIC_BASE_URL);
+}
+
+/** Store a viewer-recorded 35s clip (rolling browser buffer) as the Moment's permanent video. */
+export async function uploadMomentClipVideo(momentId: string, bytes: Buffer, contentType: string): Promise<string> {
+  if (!clipUploadConfigured()) throw new Error("media-not-configured");
+  const ext = contentType === "video/mp4" ? "mp4" : "webm";
+  const key = `moments/${momentId}/clip.${ext}`;
+  await s3Client().send(new PutObjectCommand({
+    Bucket: env.R2_BUCKET,
+    Key: key,
+    Body: bytes,
+    ContentType: contentType,
+    CacheControl: "public, max-age=31536000, immutable",
+  }));
+  return publicObjectUrl(key);
+}
+
 /** Build a permanent HLS manifest referencing the immutable Egress segments in R2. */
 export async function buildPermanentMomentClip(
   moment: Moment,

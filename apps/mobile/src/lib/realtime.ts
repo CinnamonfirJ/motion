@@ -14,10 +14,9 @@ class Realtime {
 
   connect() {
     if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) return;
-    const token = getToken();
     this.ws = new WebSocket(WS_URL);
     this.ws.onopen = () => {
-      if (token) this.ws?.send(JSON.stringify({ type: "auth", token }));
+      this.authenticate();
       for (const s of this.subscribed) this.ws?.send(JSON.stringify({ type: "subscribe", streamId: s }));
       this.arm();
     };
@@ -48,6 +47,11 @@ class Realtime {
   unsubscribe(id: string) {
     this.subscribed.delete(id);
     if (this.ws?.readyState === 1) this.ws.send(JSON.stringify({ type: "unsubscribe", streamId: id }));
+  }
+  authenticate() {
+    if (this.ws?.readyState !== 1) return;
+    const token = getToken();
+    this.ws.send(JSON.stringify(token ? { type: "auth", token } : { type: "logout" }));
   }
   on(h: Handler): () => void {
     this.handlers.add(h);

@@ -6,6 +6,8 @@ import { PlusFrame, PlusMark, PlusRule, SectionIndex, TagChip, Hatch, Accordion 
 import { IconArrowRight, IconCheck, IconFingerprint } from "../components/icons";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { isPasskeySupported } from "../lib/passkey";
+import { describeMeraError, isPasskeyPrfLikelySupported } from "../lib/mera";
+import { isMeraError } from "@category-labs/mera";
 import heroShowcase from "../assets/hero-showcase.png";
 
 function Logo() {
@@ -186,7 +188,7 @@ function FeatureCol({ title, body, children }: { title: string; body: string; ch
 }
 
 const STEPS = [
-  ["Sign in", "Email or Google. An embedded wallet is created silently — no seed phrase."],
+  ["Sign in", "One passkey tap — Face ID, Touch ID or Windows Hello. Your Monad account comes from it; no seed phrase."],
   ["Watch live", "Open a stream. Playback is synced to the server's authoritative clock."],
   ["React", "Fire, laugh, wow. Every reaction is a timestamped curation signal."],
   ["Get detected", "When the crowd spikes, MOMENT DETECTED — and a 35s clip is built."],
@@ -220,11 +222,11 @@ function HowItWorks() {
 }
 
 const FAQ_ITEMS = [
-  { q: "Do I need to know anything about crypto?", a: "No. You sign in with a passkey — Face ID, Windows Hello or your fingerprint — and your passkey creates an account on Monad (Privy). Your balance shows in plain dollars. No seed phrase, no wallet to install, no gas to buy." },
+  { q: "Do I need to know anything about crypto?", a: "No. You sign in with a passkey — Face ID, Windows Hello or your fingerprint — and your passkey itself is your account on Monad. Your balance shows in plain dollars. No seed phrase, no wallet to install, no gas to buy." },
   { q: "How do I earn?", a: "React early to streams. When enough people react to the same moment, the earliest qualifying scouts become Founding Curators and share the reward for that Moment." },
   { q: "What is a Moment?", a: "A 35-second clip — 15 seconds before a reaction spike and 20 seconds after — automatically captured when the crowd's reactions accelerate past the stream's normal rhythm." },
   { q: "Where does the reward come from?", a: "A pre-funded reward pool on Monad. Each confirmed Moment splits its reward between the creator and the Founding Curators, settled in a real onchain transaction." },
-  { q: "Is it the same on my phone and laptop?", a: "Yes. One account and one embedded wallet follow you across web, iOS and Android — same Moments, same curator rank, same earnings." },
+  { q: "Is it the same on my phone and laptop?", a: "Yes. Your passkey syncs with iCloud Keychain or Google Password Manager, so the same account follows you to any device — same Moments, same curator rank, same earnings." },
 ];
 
 function Faq() {
@@ -250,7 +252,7 @@ function StartSection() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [showEmail, setShowEmail] = useState(false);
-  const [passkeys, setPasskeys] = useState(authMode === "privy");
+  const [passkeys, setPasskeys] = useState(authMode === "mera" && isPasskeyPrfLikelySupported());
   const [busy, setBusy] = useState<null | "signin" | "create" | "email">(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -266,13 +268,17 @@ function StartSection() {
     } catch (e: any) {
       const msg = String(e?.message ?? e);
       console.error("[auth] sign-in failed:", e);
-      if (/no-passkey-account/.test(msg)) setError("No passkey on this device yet — create one below.");
+      const meraMsg = describeMeraError(e);
+      if (meraMsg) setError(meraMsg);
+      else if (/no-passkey-account/.test(msg)) setError("No passkey on this device yet — create one below.");
       // WebAuthn reports cancel / timeout / "no passkey for this site" all as a NotAllowedError
-      // DOMException, whose message ("The operation either timed out or was not allowed") lacks the name.
-      else if (e?.name === "NotAllowedError" || /cancel|NotAllowed|timed out or was not allowed/i.test(msg))
+      // DOMException (Mera wraps it as PASSKEY_OPERATION_FAILED); the message lacks the name.
+      else if (e?.name === "NotAllowedError" || (isMeraError(e) && e.code === "PASSKEY_OPERATION_FAILED") || /cancel|NotAllowed|timed out or was not allowed/i.test(msg))
         setError(kind === "signin" ? `${cancelMsg} No passkey for ENNOIA on this device? Create one below.` : cancelMsg);
+      else if (/invalid-signature|challenge-expired/.test(msg)) setError("Your sign-in expired. Tap sign in again.");
       else if (/network|fetch|failed|timeout|abort/i.test(msg)) setError("ENNOIA isn't answering. Check your connection and try again in a moment.");
-      else setError("That didn't land — give it a moment and try again.");
+      // Keep the underlying reason visible so failures can be diagnosed from a screenshot.
+      else setError(`That didn't land — give it a moment and try again. (${msg.slice(0, 80)})`);
     } finally {
       setBusy(null);
     }
@@ -286,11 +292,11 @@ function StartSection() {
             <TagChip className="self-start">Start free</TagChip>
             <h2 className="mt-5 text-h1 md:text-display">Your first find is out there.</h2>
             <p className="mt-4 max-w-sm font-mono text-body text-text-secondary">
-              Your passkey creates an account on Monad (Privy). No seed phrase. Unlock with Face ID, Windows Hello or your
+              Your passkey is your Monad account. No seed phrase, no wallet app, no email codes. Unlock with Face ID, Windows Hello or your
               fingerprint — the crypto stays out of the way.
             </p>
             <ul className="mt-6 space-y-3">
-              {["Sign in with your device biometric", "Monad account created behind your passkey", "No seed phrase, no wallet to install"].map((t) => (
+              {["Sign in with your device biometric", "Same account on any device with your passkey", "No seed phrase, no wallet to install"].map((t) => (
                 <li key={t} className="flex items-center gap-3 border-b border-border pb-3 font-mono text-bodysm text-text-secondary">
                   <IconCheck size={16} className="text-leaf" />
                   {t}
@@ -351,7 +357,7 @@ function StartSection() {
             )}
 
             {error && <p className="font-mono text-bodysm text-error">{error}</p>}
-            <p className="font-mono text-micro text-text-muted">Your passkey creates an account on Monad (Privy). No seed phrase.</p>
+            <p className="font-mono text-micro text-text-muted">Your passkey is your account. Nothing secret is stored — not even by us.</p>
           </div>
         </div>
       </PlusFrame>

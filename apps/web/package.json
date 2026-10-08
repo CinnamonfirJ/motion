@@ -10,10 +10,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@category-labs/mera": "0.2.0",
     "@ennoia/core": "workspace:*",
     "@livekit/components-react": "^2.9.24",
     "@livekit/components-styles": "^1.2.0",
-    "@privy-io/react-auth": "^3.44.0",
+    "@scure/bip32": "^2.4.0",
+    "@scure/bip39": "^2.4.0",
     "livekit-client": "^2.22.3",
     "lucide-react": "^1.48.0",
     "react": "19.2.3",
