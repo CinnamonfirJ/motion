@@ -220,7 +220,7 @@ The same core experience must work across:
 
 - web;
 - iOS;
-- Android.
+- Android. 
 
 ---
 
