@@ -1,77 +1,76 @@
-# Memory — ENNOIA livestream: studio, realtime latency, moderation, analytics
+# Memory — ENNOIA: demo seeder, waitlist cutover, profile editing, auth/domain fixes, perf
 
-Last updated: 2026-09-25
+Last updated: 2026-10-02
 
 Monorepo `C:\Users\JESSE\Documents\Github Repo\motion`. Work on `envio`, then
 `git checkout master && git merge --ff-only origin/master && git merge envio && git push origin master`
-(Render auto-deploys backend, Vercel auto-deploys web — both from `master`). Latest master ≈ `39ce9ef`.
-**User handles ALL EAS/native mobile builds — never build/push native.**
+(Render auto-deploys the API from `master`; Vercel auto-deploys web from `master`). Latest master ≈ `0bdf1ba`.
+**User handles ALL EAS/native mobile builds — never build/push native.** Render free tier + Neon.
+Prod API host is **https://ennoia.onrender.com** (NOT ennoia-api.onrender.com). Web is **www.ennoia.live**
+(apex `ennoia.live` 308-redirects to www). Waitlist is a separate Vercel project `ennoia-waitlist-zeta.vercel.app`.
 
 ## What was built (this session, newest first)
 
-**Real analytics / live stats** (`39ce9ef`). Hub (`apps/server/src/realtime.ts`) accumulates REAL viewer
-sessions (connection duration) → total watch time / peak / unique (never viewers×duration). New
-`apps/server/src/analytics.ts` (reactions, Moments, followers, new-followers-since-live, latest follower)
-+ host-only `GET /streams/:id/analytics`. Studio (`LiveKitStage.tsx`) Live Stats + info cards now show
-REAL data — ALL `DEMO` placeholders removed. No fake ±% deltas (green +N only when real new-followers > 0).
-Test: `apps/server/src/realtime.test.ts` (watch-time/peak/unique). Top Supporter/Recent Cheers replaced
-with real Moment/reaction/viewer metrics (no server-side tip records; those are onchain).
-
-**Persistent moderation** (`c9ddb8b`). New `stream_bans` table + `apps/server/src/moderation.ts`
-(ban=permanent, timeout=auto-expiring, lazy clear). Host-only `GET/POST/DELETE /streams/:id/bans`;
-banning revokes speaker/guest. Enforcement: banned users 403 from chat + speaker-request. New
-`moderation` realtime event → banned viewer's chat shows "can't chat"; host Moderation panel lists real
-bans + Unban; host times a chatter out (⊘) from Live Chat. Test: `apps/server/src/moderation.test.ts`.
-
-**Realtime latency fix (~30s → realtime)** (`c824e88`). Root cause: no WS keepalive → proxy idle-closed
-sockets left half-open, undetected ~30s. Fix: server ping every 25s + drops stale conns
-(`realtime.ts` heartbeat, `index.ts`); clients pong + 45s watchdog reconnect (web+mobile `lib/realtime.ts`).
-Chat route BROADCASTS first, persists to Neon async (`liveChat.build`/`persist`). Optimistic echo (<100ms)
-with `clientId` → canonical broadcast reconciles/dedups; Failed·Retry; reconnect re-syncs history (web
-`LiveChat.tsx`, mobile `live-chat.tsx`). Renamed streamer "Request Mic" → "Mic Requests". Test:
-`apps/server/src/liveChat.test.ts`.
-
-**Studio (earlier this session)** — desktop host studio in `LiveKitStage.tsx` is the reference LAYOUT
-(top nav REMOVED per user) rendered in ENNOIA's SHARP style (no rounded/gradient/shadow, app tokens,
-lucide-react icons, theme-aware). Mobile studio + Live wrapper use lucide-react-native (+ react-native-svg
-15.15.4) — needs a fresh EAS build to show. Live screens theme-aware (video pane scoped dark).
+- **Demo content seeder** `apps/server/src/demoSeed.ts` + gated `POST /admin/seed-demo` (routes.ts).
+  Gated by `DEMO_SEED_SECRET` env (inert unless set). Fills ONE account (by @handle) with 12 cast users,
+  5 streams, 16 image posts, ~400 reactions, 27 SETTLED moments, followers; earnings via real
+  `distributeReward` 70/20/10 (~$10.7k creator / ~$2.4k scout). Images committed in
+  `apps/server/seed-assets/{posts,streams}`, uploaded to R2. All tagged (`demo:cast:%` / `demo_%`).
+  Body flags: `{handle, secret, reset?, clearOnly?}`. **`clearOnly:true`** wipes all demo rows + demo R2
+  images (returns counts); with `handle` also resets that account's `isCreator=false` + nulls demo avatar.
+  **Demo data was seeded then FULLY CLEARED at end of session; twilight870 profile reset.**
+- **Profile editing**: `PATCH /me` (name/handle/avatar → DB, then best-effort Privy `setCustomMetadata`);
+  store `Users.byHandle/updateProfile/resetSeededProfile`; privy `syncPrivyProfile`. Web + mobile Profile
+  screens got an Edit view; `session.updateProfile` added (web + mobile).
+- **Server-side image upload** `POST /media/post-upload-direct` (raw image bytes → R2 via server creds, no
+  browser CORS). Web PostComposer uses it for images + avatar; videos still use presigned
+  `/media/post-upload`. 16MB images-only binary body parser in index.ts.
+- **Hero image**: `apps/web/src/screens/SignIn.tsx` MockupBand now shows `apps/web/src/assets/hero-showcase.png`.
+- **Waitlist path-proxy**: root `vercel.json` rewrites `/waitlist[/**]` → `ennoia-waitlist-zeta.vercel.app`;
+  `waitlist/next.config.mjs` has `basePath:/waitlist`; waitlist absolute asset/fetch refs prefixed via
+  `NEXT_PUBLIC_BASE_PATH`. LIVE on ennoia.live/waitlist.
+- **Perf**: batched moment hydration — `hydrateMoments` loads curators in one IN-query; new
+  `view.ts momentViews()` (Streams.byIds + Users.byIds + grouped viewCountsFor) used by /moments, /feed,
+  /streams/:id, /feeds/trending; earnings batch stream titles/creators. `/moments` ~17s → ~3s.
+- **Cold-start fixes**: `.github/workflows/keep-warm.yml` pings /health every 10 min; web+mobile `req()`
+  retry 502/503/504 + network with backoff.
+- **CORS fix**: `index.ts` always allows `https://ennoia.live` + `https://www.ennoia.live` (was blocking login).
+- **Privy RP unified on www.ennoia.live**: eas.json `EXPO_PUBLIC_PRIVY_RELYING_PARTY` + `EXPO_PUBLIC_WEB_URL`
+  → https://www.ennoia.live; app.json ios.associatedDomains webcredentials/applinks; AASA at
+  `apps/web/public/.well-known/apple-app-site-association` (**placeholder `__APPLE_TEAM_ID__` — must fill**);
+  Android assetlinks already served. vercel.json serves AASA as json + excludes /.well-known from SPA rewrite.
+- **Mobile run**: `start`→`expo start --dev-client` (+ `go` = Expo Go); metro blockList skips other workspaces.
 
 ## Decisions made
 
-- **Studio style LOCKED to app's sharp system** (no rounded/gradients/shadows). Reference image = LAYOUT
-  only, not its purple/rounded look. Do not reintroduce rounded/gradients/shadows.
-- Realtime transport = the existing single WS hub (in-memory). Chat/reactions/mic/guest/moderation/presence
-  NEVER wait on Monad/Envio. Persistence is async.
-- Analytics/live stats are REAL (no fake data). Where no backend exists (server-side tips) → show real
-  alternative metrics or neutral states, never fabricated numbers.
-- Mobile is dark-only. Waitlist = separate Vercel project (Root Dir `waitlist`); app = its own project.
+- Demo data lives in PROD (Neon), attached to the user's Privy account (Privy is live auth, can't log into a
+  fabricated row). `env.ts` THROWS in prod if ENABLE_SEED/ENABLE_DEMO_ROUTES on → seeder uses its own secret gate.
+- Canonical web host = **www.ennoia.live** (apex redirects to it); Privy relying party + passkeys live on www.
+- Web auth is **passkey-only** (email OTP was built then removed per user). Email only in non-Privy fallback.
 
 ## Problems solved
 
-- 30s chat delay = missing WS keepalive (half-open sockets). See latency fix above.
-- SQLite schema migration splits by `;`, so an inline SQL comment containing `;` broke `CREATE TABLE`
-  (stream_bans). Rule: **no semicolons inside schema comments** in `db.ts`.
-- Vercel pnpm too old for lockfileVersion 9.0 → root `vercel.json` uses `npx --yes pnpm@11.5.0`.
+- Login "That didn't land"/"isn't answering" had THREE layers (see [[ennoia-auth-domains]]): Privy allowed
+  origins must include `https://www.ennoia.live` (with scheme); passkeys are domain-bound (old vercel-domain
+  passkeys fail → register fresh on live host); and our API's OWN CORS allowlist blocked www. All fixed.
+- Seeder first version did ~1500 sequential Neon writes → Render request timeout + overlapping-retry
+  corruption. Fixed with bulk multi-row inserts (chunked for sqlite), parallel R2 uploads, concurrency guard.
+- Post image upload "Failed to fetch" = missing R2 CORS → solved with server-side upload route.
+- Each Render↔Neon query ≈280ms (likely cross-region) — amplified N+1s; batching was the fix.
 
 ## Current state
 
-All typechecks green (core/server/web/mobile); server tests pass: social/live-room, liveChat, moderation,
-realtime hub. Web build green. Everything committed to `master`, deployed via Vercel/Render. Mobile lucide
-code on master but needs a new EAS build to appear on device.
+All four packages typecheck; server/web build green. Login works on www.ennoia.live (passkey). Posting +
+image upload work. Waitlist proxy live. Feed/moments ~3s. Demo data cleared from prod. Everything on master/deployed.
 
 ## Next session starts with
 
-Remaining from the big realtime spec (user offered these next): **reaction aggregation** (100–250ms crowd
-window; reactions still broadcast per-event), **Stream Settings** editor (title/category/tags + realtime
-metadata push), a **load-sim script** (100/1,000 viewers) for measured latency, wiring the left-rail nav
-items (Invite Guest/Moderation/Settings/Analytics/Monetization) to open panels, and Top Supporter/Recent
-Cheers via real Envio tip data.
+Nothing pending. Optional follow-ups: (1) fill `__APPLE_TEAM_ID__` in the AASA + run a fresh EAS build so
+native passkeys validate on www.ennoia.live (Android assetlinks already ok; user confirms SHA-256 via
+`eas credentials` if Android passkey fails). (2) Remove `DEMO_SEED_SECRET` from Render to disable the seeder.
+(3) Biggest latency lever left: colocate Render + Neon regions (~280ms/query → sub-second).
 
-## Open questions / blockers (user-side)
+## Open questions
 
-- **R2 CORS** must be added (Cloudflare → R2 `ennoia` bucket) or browser image uploads stay "Failed to fetch".
-- **LiveKit Egress recording** still failing — need the Render log `permanent stream recording unavailable`
-  (likely Egress not enabled) for permanent Moment clips. Streaming works without it.
-- Mobile lucide icons require a fresh EAS build.
-- Realtime scaling: in-memory single-instance hub won't fan out across instances — needs Redis/NATS or
-  LiveKit data channels before large audiences.
+- Apple Team ID for the AASA (needed only for iOS passkeys).
+- Whether to keep the seeder endpoint deployed (remove DEMO_SEED_SECRET to disable).
