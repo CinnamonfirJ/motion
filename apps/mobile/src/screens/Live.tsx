@@ -184,7 +184,7 @@ export function Live() {
   );
 
   const isHost = stream.creator?.id === user?.id;
-  const H = Math.min(height * (isHost ? 0.78 : 0.62), isHost ? 820 : 640);
+  const H = Math.min(height * (isHost ? 0.72 : 0.58), isHost ? 760 : 620);
 
   return (
     <View style={{ flex: 1, backgroundColor: color.night }}>

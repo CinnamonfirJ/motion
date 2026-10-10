@@ -28,7 +28,7 @@ export function PostDetail() {
     catch { setError("Could not send report. Try again."); }
     finally { setReporting(false); }
   };
-  const card = (item: PostDTO) => <PostCard post={item} onChanged={() => void load()} onOpen={() => nav.navigate("PostDetail", { id: item.id })} onAuthor={(userId) => nav.navigate("PublicProfile", { id: userId })} onQuote={(postId) => nav.navigate("CreatePost", { quotePostId: postId })} />;
+  const card = (item: PostDTO) => <PostCard post={item} onChanged={() => void load()} onDeleted={item.id === id ? () => nav.goBack() : () => void load()} onOpen={() => nav.navigate("PostDetail", { id: item.id })} onAuthor={(userId) => nav.navigate("PublicProfile", { id: userId })} onQuote={(postId) => nav.navigate("CreatePost", { quotePostId: postId })} />;
   return <FlatList
     style={{ flex: 1, backgroundColor: color.night }}
     contentInsetAdjustmentBehavior="automatic"

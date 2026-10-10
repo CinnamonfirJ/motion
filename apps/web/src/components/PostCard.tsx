@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type PostDTO } from "../lib/api";
+import { useSession } from "../state/session";
 import { Avatar } from "./ui";
 
 const action = "font-mono text-micro uppercase tracking-[0.1em] text-text-secondary hover:text-leaf disabled:opacity-40";
 
 export function PostCard({ post, onChanged }: { post: PostDTO; onChanged?: () => void }) {
+  const { user } = useSession();
   const ref = useRef<HTMLElement>(null);
   const [liked, setLiked] = useState(post.liked);
   const [likes, setLikes] = useState(post.likes);
@@ -75,6 +77,13 @@ export function PostCard({ post, onChanged }: { post: PostDTO; onChanged?: () =>
     try { await api.report("post", post.id, reason.trim()); setError("Report sent for review."); }
     catch { setError("Could not send the report. Try again."); }
   };
+  const deletePost = async () => {
+    if (pending || !window.confirm("Delete this post? This cannot be undone.")) return;
+    setPending(true); setError(null);
+    try { await api.deletePost(post.id); onChanged?.(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not delete this post. Try again."); }
+    finally { setPending(false); }
+  };
 
   return <article ref={ref} className="border border-border bg-surface1 p-4" aria-label={`Post by ${post.author.displayName}`}>
     {post.repostOfId && <p className="mb-2 font-mono text-micro uppercase tracking-[0.1em] text-text-muted">↻ {post.author.displayName} reshared</p>}
@@ -94,7 +103,9 @@ export function PostCard({ post, onChanged }: { post: PostDTO; onChanged?: () =>
           <button className={action} onClick={() => setExpanded(expanded === "quote" ? null : "quote")}>Quote</button>
           <button className={`${action} ${liked ? "text-leaf" : ""}`} disabled={pending} aria-pressed={liked} onClick={() => void toggleLike()}>♥ {likes}</button>
           <span className="font-mono text-micro text-text-muted">Views · {post.views}</span>
-          <button className={action} onClick={() => void report()}>Report</button>
+          {user?.id === post.author.id
+            ? <button className={`${action} text-error`} disabled={pending} onClick={() => void deletePost()}>Delete</button>
+            : <button className={action} onClick={() => void report()}>Report</button>}
         </div>
         {expanded && <div className="mt-3 space-y-2"><label htmlFor={`${expanded}-${post.id}`} className="font-mono text-micro uppercase text-text-secondary">{expanded === "reply" ? "Your reply" : "Your quote"}</label><textarea id={`${expanded}-${post.id}`} value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={2800} className="min-h-20 w-full border border-border bg-surface2 p-3 text-body text-text" /><div className="flex gap-2"><button className="bg-brand px-4 py-2 font-mono text-micro uppercase text-white disabled:opacity-40" disabled={pending || !draft.trim()} onClick={() => void submit()}>Publish</button><button className={action} onClick={() => setExpanded(null)}>Cancel</button></div></div>}
         {replies && <div className="mt-4 space-y-3 border-l border-border pl-3"><button className={action} onClick={() => setExpanded("reply")}>Write a reply</button>{replies.length === 0 ? <p className="text-bodysm text-text-muted">No replies yet.</p> : replies.map((reply) => <div key={reply.id} className="border-t border-border pt-2"><p className="text-bodysm font-semibold">{reply.author.displayName} <span className="font-mono text-micro text-text-muted">@{reply.author.handle}</span></p><p className="mt-1 whitespace-pre-wrap text-bodysm text-text-secondary">{reply.body}</p></div>)}</div>}

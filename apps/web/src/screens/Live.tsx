@@ -288,7 +288,7 @@ export function Live() {
       <div className="mx-auto flex w-full max-w-[1600px] flex-col lg:h-[100dvh] lg:flex-row">
         {/* ---- MAIN column: video + engagement ---- */}
         <div className="flex min-w-0 flex-1 flex-col lg:min-h-0">
-          <div data-theme="dark" className="relative w-full shrink-0 bg-black lg:min-h-0 lg:flex-1" style={{ height: "clamp(220px, 42vh, 560px)" }}>
+          <div data-theme="dark" className="relative w-full shrink-0 bg-black lg:min-h-0 lg:flex-1" style={{ height: "clamp(280px, 50dvh, 560px)" }}>
             <div ref={stageRef} className="absolute inset-0 lg:static lg:h-full">{videoNode}</div>
             <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/50 to-transparent" aria-hidden />
 

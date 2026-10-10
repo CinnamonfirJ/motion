@@ -118,6 +118,15 @@ test("social feed and live-room permissions use the same authenticated identitie
     const invitedSpeakerRoom = (await app.inject({ method: "GET", url: `/streams/${streamId}/live-room`, headers: viewerAuth })).json();
     assert.equal(invitedSpeakerRoom.role, "speaker");
     assert.equal(invitedSpeakerRoom.mySpeaker.canCamera, true);
+
+    // Posts, including replies, are removable only by their author and disappear from reads.
+    const replyId = reply.json().post.id as string;
+    assert.equal((await app.inject({ method: "DELETE", url: `/posts/${postId}`, headers: hostAuth })).statusCode, 404);
+    assert.equal((await app.inject({ method: "DELETE", url: `/posts/${replyId}`, headers: hostAuth })).statusCode, 200);
+    assert.equal((await app.inject({ method: "GET", url: `/posts/${postId}/replies`, headers: viewerAuth })).json().posts.length, 0);
+    assert.equal((await app.inject({ method: "DELETE", url: `/posts/${postId}`, headers: viewerAuth })).statusCode, 200);
+    assert.equal((await app.inject({ method: "GET", url: `/posts/${postId}`, headers: viewerAuth })).statusCode, 404);
+    assert.equal((await app.inject({ method: "GET", url: `/users/${viewer.user.id}/posts`, headers: viewerAuth })).json().posts.length, 0);
   } finally {
     await app.close();
     await db.close();
