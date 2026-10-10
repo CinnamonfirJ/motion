@@ -55,7 +55,7 @@ failed images fall back to the same deterministic initials design used before.
 ### Web broadcast stage and controls
 
 File: `apps/web/src/components/LiveKitStage.tsx`
-Last updated: 2026-09-24
+Last updated: 2026-10-10
 
 | Property | Class |
 | --- | --- |
@@ -75,12 +75,14 @@ Last updated: 2026-09-24
 expose different actions. Speaker mic/camera publication state and permission-sync guidance
 use the existing `text-text-secondary` supporting-text treatment; host speaker rows use
 `font-mono text-micro uppercase` for live/off status. Black and translucent black belong
-only to the video surface.
+only to the video surface. On phone-sized video, the control strip remains visible and
+expands a square `bg-surface1` panel over the video; pending speaker invites use `text-lime`.
+The desktop guest list stays visible even before any speaker requests exist.
 
 ### Mobile broadcast stage and controls
 
 File: `apps/mobile/src/components/livekit-stage.tsx`
-Last updated: 2026-09-24
+Last updated: 2026-10-10
 
 | Property | Value |
 | --- | --- |
@@ -101,12 +103,14 @@ Viewer and speaker actions are intentionally separated from host moderation cont
 Speaker mic/camera publication state and permission-sync guidance use `color.textSecondary`
 with `type.bodysm`; host speaker-row status uses `eyebrow(10)` on the same surface.
 On iOS, the screen-share control opens the system broadcast picker while preserving
-the existing square control styling; Android keeps its foreground-service path.
+the existing square control styling; Android keeps its foreground-service path. The
+watch-first video fills the stage; a `color.surface1` control strip stays visible at its
+bottom and expands a square, scrollable panel. Invites use the existing `color.lime` accent.
 
 ### Web social post card
 
 File: `apps/web/src/components/PostCard.tsx`
-Last updated: 2026-09-24
+Last updated: 2026-10-10
 
 | Property | Class |
 | --- | --- |
@@ -123,7 +127,8 @@ Last updated: 2026-09-24
 | Accent usage | `text-leaf` for links and active like |
 
 **Pattern notes:** Feed cards use a restrained, square document-like surface. Media may
-use `bg-black`; nested quoted/reposted content uses the elevated surface token.
+use `bg-black`; nested quoted/reposted content uses the elevated surface token. The
+owner-only Delete action uses the same mono action typography with `text-error`.
 
 ### Web post composer
 
@@ -193,7 +198,7 @@ metadata line instead of introducing a different card treatment.
 ### Mobile social post card
 
 File: `apps/mobile/src/components/post-card.tsx`
-Last updated: 2026-09-24
+Last updated: 2026-10-10
 
 | Property | Value |
 | --- | --- |
@@ -211,7 +216,8 @@ Last updated: 2026-09-24
 
 **Pattern notes:** Native posts mirror the web card's square hierarchy. Video and image
 media stay inside the card; link and referenced-post areas use the elevated surface.
-Author identity uses the shared photo avatar with initials fallback.
+Author identity uses the shared photo avatar with initials fallback. The owner-only
+Delete action keeps `eyebrow(10)` action typography and uses `color.error`.
 
 ### Mobile post composer
 
@@ -317,3 +323,23 @@ Last updated: 2026-09-24
 
 **Pattern notes:** Identity photos are now consistent across account, creator, and
 founding-curator areas without changing the surrounding screen layout.
+
+### Phone live viewing frame
+
+Files: `apps/web/src/screens/Live.tsx`, `apps/mobile/src/screens/Live.tsx`
+Last updated: 2026-10-10
+
+| Property | Web pattern | Mobile pattern |
+| --- | --- | --- |
+| Video surface | `bg-black` | `color.night` |
+| Below-video surface | `bg-surface1` | `color.night` |
+| Separation | `border-t border-border` | stage control border uses `color.border` |
+| Primary text | `text-text` | `color.text` |
+| Supporting text | `text-text-secondary` | `color.textSecondary` |
+| Action labels | mono uppercase | `eyebrow(11)` |
+| Accent | `text-leaf` | `color.lime` |
+| Shadow | none | none |
+
+**Pattern notes:** Phone viewing prioritizes a full video area; host/speaker controls
+expand over the video only when needed, while reactions and chat remain below it.
+Only video overlays may use rounded pills or translucent black.

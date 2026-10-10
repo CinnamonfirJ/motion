@@ -1,23 +1,26 @@
 import { useEffect, useState } from "react";
-import { Linking, Pressable, Text, View } from "react-native";
+import { Alert, Linking, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { api, type PostDTO } from "../lib/api";
 import { color, eyebrow, type } from "../theme";
 import { Avatar } from "./ui";
+import { useSession } from "../session";
 
 function PostVideo({ url }: { url: string }) {
   const player = useVideoPlayer(url);
   return <VideoView player={player} style={{ width: "100%", aspectRatio: 16 / 9, backgroundColor: color.night }} contentFit="contain" nativeControls />;
 }
 
-export function PostCard({ post, onChanged, onOpen, onAuthor, onQuote }: {
+export function PostCard({ post, onChanged, onDeleted, onOpen, onAuthor, onQuote }: {
   post: PostDTO;
   onChanged: () => void;
+  onDeleted?: () => void;
   onOpen: () => void;
   onAuthor: (id: string) => void;
   onQuote: (id: string) => void;
 }) {
+  const { user } = useSession();
   const [liked, setLiked] = useState(post.liked);
   const [likes, setLikes] = useState(post.likes);
   const [pending, setPending] = useState(false);
@@ -50,6 +53,18 @@ export function PostCard({ post, onChanged, onOpen, onAuthor, onQuote }: {
     if (!post.linkUrl) return;
     try { await Linking.openURL(post.linkUrl); } catch { setError("Could not open link."); }
   };
+  const deletePost = () => {
+    if (pending) return;
+    Alert.alert("Delete post?", "This cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => {
+        setPending(true); setError(null);
+        void api.deletePost(post.id).then(() => { if (onDeleted) onDeleted(); else onChanged(); })
+          .catch((cause) => setError(cause instanceof Error ? cause.message : "Could not delete this post. Try again."))
+          .finally(() => setPending(false));
+      } },
+    ]);
+  };
   const meta = { color: color.textSecondary, ...eyebrow(10) };
 
   return <View style={{ backgroundColor: color.surface1, borderColor: color.border, borderWidth: 1, padding: 14, gap: 10 }}>
@@ -67,6 +82,7 @@ export function PostCard({ post, onChanged, onOpen, onAuthor, onQuote }: {
       <Pressable accessibilityRole="button" accessibilityLabel="Quote post" onPress={() => onQuote(post.id)}><Text style={meta}>Quote</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={`Likes ${likes}`} accessibilityState={{ selected: liked }} disabled={pending} onPress={() => void toggleLike()}><Text style={{ ...meta, color: liked ? color.lime : color.textSecondary }}>♥ {likes}</Text></Pressable>
       <Text style={meta}>Views · {post.views}</Text>
+      {user?.id === post.author.id ? <Pressable accessibilityRole="button" accessibilityLabel="Delete post" disabled={pending} onPress={deletePost}><Text style={{ ...meta, color: color.error }}>Delete</Text></Pressable> : null}
     </View>
     {error ? <Text selectable accessibilityRole="alert" style={{ color: color.error, ...type.bodysm }}>{error}</Text> : null}
   </View>;

@@ -189,6 +189,7 @@ export const api = {
   feed: (mode: "for-you" | "following", before?: number, communityId?: string) =>
     req<{ items: FeedItemDTO[]; nextBefore: number | null }>(`/feed?${new URLSearchParams({ mode, ...(before ? { before: String(before) } : {}), ...(communityId ? { communityId } : {}) })}`),
   post: (id: string) => req<{ post: PostDTO }>(`/posts/${id}`),
+  deletePost: (id: string) => req<{ ok: boolean }>(`/posts/${id}`, { method: "DELETE" }),
   replies: (id: string) => req<{ posts: PostDTO[] }>(`/posts/${id}/replies`),
   createPost: (input: { text?: string; uploadIds?: string[]; linkUrl?: string; streamId?: string; momentId?: string; communityId?: string; replyToId?: string; quotePostId?: string; repostOfId?: string }) =>
     req<{ post: PostDTO }>("/posts", { method: "POST", body: JSON.stringify(input) }),

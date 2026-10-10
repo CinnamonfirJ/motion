@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   Menu, Search, Bell, MessageSquare, Gamepad2, Radio, ArrowLeft, BadgeCheck, Mic, MicOff,
@@ -73,6 +73,9 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
   const [screenAudioNotice, setScreenAudioNotice] = useState<string | null>(null);
   const [nowTs, setNowTs] = useState(Date.now());
   const [bans, setBans] = useState<BanDTO[]>([]);
+  const inviteRef = useRef<HTMLDivElement>(null);
+  const requestsRef = useRef<HTMLDivElement>(null);
+  const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const wide = useMediaQuery("(min-width: 1024px)");
 
   useEffect(() => {
@@ -159,6 +162,8 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
   const requested = state?.speakers.filter((speaker) => speaker.status === "requested") ?? [];
   const approved = state?.speakers.filter((speaker) => speaker.status === "approved") ?? [];
   const invited = state?.speakers.filter((speaker) => speaker.status === "invited") ?? [];
+  const availableViewers = participants.filter((person) => person.identity !== hostId && !state?.speakers.some((speaker) => speaker.userId === person.identity));
+  const controlsVisible = mobileControlsOpen || state?.mySpeaker?.status === "invited";
 
   // ---- shared building blocks ----
   const videoSurface = (
@@ -191,7 +196,7 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
       </section>
       <section>
         <h3 className="font-mono text-micro uppercase tracking-[0.14em] text-text-secondary">Invite viewers</h3>
-        {participants.filter((person) => person.identity !== hostId && !state.speakers.some((speaker) => speaker.userId === person.identity)).map((person) => <div key={person.identity} className="mt-2 flex items-center justify-between gap-2 border border-border p-2"><span className="truncate text-bodysm">{person.name || person.identity}</span><button className={control} disabled={pending} onClick={() => void act(() => api.inviteSpeaker(streamId, person.identity))}>Invite</button></div>)}
+        {availableViewers.map((person) => <div key={person.identity} className="mt-2 flex items-center justify-between gap-2 border border-border p-2"><span className="truncate text-bodysm">{person.name || person.identity}</span><button className={control} disabled={pending} onClick={() => void act(() => api.inviteSpeaker(streamId, person.identity))}>Invite</button></div>)}
         {invited.map((speaker) => <p key={speaker.userId} className="mt-2 text-bodysm text-text-muted">Invite pending · {nameOf(speaker.userId)}</p>)}
       </section>
       <section>
@@ -207,16 +212,14 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
     const live = viewerCount ?? state?.speakers.length ?? 0;
     const creatorName = stream?.creator?.displayName ?? "You";
     const eyebrow = "font-mono text-micro uppercase tracking-[0.14em] text-text-secondary";
+    const showInvite = () => inviteRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const showRequests = () => requestsRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     const controls = [
-      { icon: I.invite, title: "Invite Guest", sub: "Invite someone to join your stream" as string, badge: undefined as number | undefined },
-      { icon: I.mic, title: "Mic Requests", sub: "View and manage mic requests", badge: requested.length || undefined },
-      { icon: I.shield, title: "Moderation", sub: "Ban, timeout, or manage users", badge: undefined },
-      { icon: I.gear, title: "Stream Settings", sub: "Title, category, tags, quality", badge: undefined },
-      { icon: I.chart, title: "Analytics", sub: "View stream performance", badge: undefined },
-      { icon: I.dollar, title: "Monetization", sub: "Manage rewards & subscriptions", badge: undefined },
+      { icon: I.invite, title: "Invite Guest", sub: "Invite someone already watching", badge: undefined as number | undefined, onClick: showInvite },
+      { icon: I.mic, title: "Mic Requests", sub: "View and manage mic requests", badge: requested.length || undefined, onClick: showRequests },
     ];
     const ctrlBtn = (icon: ReactNode, label: string, onClick: (() => void) | undefined, opts?: { active?: boolean; badge?: number }) => (
-      <button onClick={onClick} className={`relative flex min-w-[66px] flex-col items-center gap-1 border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.08em] transition ${opts?.active ? "border-leaf/60 bg-surface2 text-leaf" : "border-border bg-surface1 text-text-secondary hover:border-borderStrong hover:text-text"}`}>
+      <button type="button" onClick={onClick} disabled={!onClick} className={`relative flex min-w-[66px] flex-col items-center gap-1 border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.08em] transition ${opts?.active ? "border-leaf/60 bg-surface2 text-leaf" : "border-border bg-surface1 text-text-secondary hover:border-borderStrong hover:text-text"}`}>
         <span>{icon}</span>
         <span>{label}</span>
         {opts?.badge ? <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center bg-brand px-1 text-[10px] font-bold text-white">{opts.badge}</span> : null}
@@ -259,7 +262,7 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
               <h3 className={`mb-2 px-1 ${eyebrow}`}>Stream Controls</h3>
               <div className={`${S.card} divide-y divide-border`}>
                 {controls.map((c) => (
-                  <button key={c.title} className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-surface2">
+                  <button key={c.title} type="button" onClick={c.onClick} className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-surface2">
                     <span className={`${badge} relative shrink-0`}>{c.icon}{c.badge ? <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center bg-brand px-1 text-[10px] font-bold text-white">{c.badge}</span> : null}</span>
                     <span className="min-w-0 flex-1"><span className="block text-bodysm font-semibold text-text">{c.title}</span><span className="block truncate font-mono text-micro text-text-muted">{c.sub}</span></span>
                     <span className="text-text-muted">{I.chevron}</span>
@@ -299,9 +302,8 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
               {ctrlBtn(isMicrophoneEnabled ? I.mic : I.micOff, isMicrophoneEnabled ? "Mute" : "Unmute", () => void act(() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)), { active: isMicrophoneEnabled })}
               {canCamera && ctrlBtn(I.cam, "Camera", () => void act(() => localParticipant.setCameraEnabled(!isCameraEnabled), "Camera"), { active: isCameraEnabled })}
               {canScreen && ctrlBtn(I.screen, "Share + audio", toggleScreenShare, { active: isScreenShareEnabled })}
-              {ctrlBtn(I.invite, "Invite Guest", undefined)}
-              {ctrlBtn(I.mic, "Mic Requests", undefined, { badge: requested.length || undefined })}
-              {ctrlBtn(I.more, "More", undefined)}
+              {ctrlBtn(I.invite, "Invite Guest", showInvite)}
+              {ctrlBtn(I.mic, "Mic Requests", showRequests, { badge: requested.length || undefined })}
               <div className="ml-auto flex items-center gap-2">
                 <span className={`${S.primary} inline-flex items-center gap-1.5 px-3 py-2 font-mono text-micro uppercase tracking-[0.1em]`}><span className="h-1.5 w-1.5 bg-white" />Live</span>
                 <span className="inline-flex items-center gap-1.5 border border-border bg-surface1 px-3 py-2 font-mono text-micro font-semibold text-text">{I.users}{live}</span>
@@ -328,9 +330,8 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
             </div>
 
             {/* REAL host popovers — the image's "Mic Requests" + "Guest Invite" cards, functional */}
-            {(requested.length > 0 || invited.length > 0 || approved.length > 0) && (
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <div className={`${S.card} p-3`}>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div ref={requestsRef} className={`${S.card} p-3`}>
                   <p className="mb-2 flex items-center gap-1.5 text-bodysm font-semibold text-text">{I.mic}Mic Requests ({requested.length})</p>
                   {requested.length === 0 && <p className="font-mono text-micro text-text-muted">No pending requests.</p>}
                   {requested.map((sp) => (
@@ -350,19 +351,18 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
                     </div>
                   ))}
                 </div>
-                <div className={`${S.card} p-3`}>
+                <div ref={inviteRef} className={`${S.card} p-3`}>
                   <p className="mb-1 flex items-center gap-1.5 text-bodysm font-semibold text-text">{I.invite}Guest Invite</p>
                   <p className="font-mono text-micro text-text-muted">Invite a viewer to join your stream.</p>
                   <div className="mt-2 max-h-32 space-y-2 overflow-y-auto">
-                    {participants.filter((p) => p.identity !== hostId && !state?.speakers.some((s) => s.userId === p.identity)).map((p) => (
+                    {availableViewers.map((p) => (
                       <div key={p.identity} className="flex items-center gap-2"><Avatar name={p.name || p.identity} size={26} /><span className="min-w-0 flex-1 truncate text-bodysm text-text">{p.name || p.identity}</span><button disabled={pending} onClick={() => void act(() => api.inviteSpeaker(streamId, p.identity))} className={primaryBtn}>Invite</button></div>
                     ))}
                     {invited.map((sp) => <p key={sp.userId} className="font-mono text-micro text-text-muted">Invite pending · {nameOf(sp.userId)}</p>)}
-                    {participants.filter((p) => p.identity !== hostId && !state?.speakers.some((s) => s.userId === p.identity)).length === 0 && invited.length === 0 && <p className="font-mono text-micro text-text-muted">No viewers to invite yet.</p>}
+                    {availableViewers.length === 0 && invited.length === 0 && <p className="font-mono text-micro text-text-muted">No viewers to invite yet.</p>}
                   </div>
                 </div>
               </div>
-            )}
           </div>
 
           {/* RIGHT: chat + moderation */}
@@ -403,9 +403,14 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
 
   // ===== DEFAULT (viewer / speaker / narrow host) — unchanged behaviour =====
   return (
-    <div className="flex h-full flex-col bg-black md:flex-row">
+    <div className="relative flex h-full flex-col bg-black md:flex-row">
       <div className="relative min-h-0 flex-1 bg-black">{videoSurface}</div>
-      <aside className="max-h-[42%] w-full overflow-y-auto border-t border-border bg-surface1 p-4 md:max-h-full md:w-72 md:border-l md:border-t-0" aria-label={isHost ? "Host controls" : "Audience controls"}>
+      <aside className="absolute inset-x-0 bottom-0 z-10 max-h-[75%] overflow-y-auto border-t border-border bg-surface1 md:static md:max-h-full md:w-72 md:border-l md:border-t-0" aria-label={isHost ? "Host controls" : "Audience controls"}>
+        <button type="button" className="flex w-full items-center justify-between px-4 py-2.5 font-mono text-micro uppercase tracking-[0.1em] text-lime md:hidden" onClick={() => setMobileControlsOpen((open) => !open)} aria-expanded={!!controlsVisible}>
+          <span>{state?.mySpeaker?.status === "invited" ? "Speaker invite waiting · tap to accept" : isHost ? "Host controls" : isSpeaker ? "Speaker controls" : "Request mic / audio"}</span><span>{controlsVisible ? "▾" : "▴"}</span>
+        </button>
+        <StartAudio label="Enable stream audio" />
+        <div className={`${controlsVisible ? "block" : "hidden"} space-y-3 overflow-y-auto p-4 md:block`}>
         <p className="font-mono text-micro uppercase tracking-[0.14em] text-lime">{isHost ? "Host studio" : isSpeaker ? "Speaker seat" : "Watching live"}</p>
         <p className="mt-2 text-bodysm text-text-secondary">{isHost ? "You control who can speak, show camera, or share a screen." : isSpeaker ? "Your speaker seat is ready. Turn on your mic or camera when you choose." : "Ask the host for a mic if you want to speak."}</p>
         {(isHost || isSpeaker) && <div className="mt-4">{avControls}</div>}
@@ -420,7 +425,7 @@ function RoomStage({ streamId, hostId, initialRole, stream, viewerCount, followe
         {error && <p role="alert" className="mt-4 border border-error px-3 py-2 text-bodysm text-error">{error}</p>}
         {canScreen && <p className="mt-3 text-bodysm text-text-secondary">For video reactions, share the video’s browser tab and enable Share tab audio in the browser prompt. Use headphones to avoid echo.</p>}
         {screenAudioNotice && <p role="status" className="mt-3 border border-border px-3 py-2 text-bodysm text-text-secondary">{screenAudioNotice}</p>}
-        <StartAudio label="Enable stream audio" />
+        </div>
       </aside>
       <RoomAudioRenderer />
     </div>
