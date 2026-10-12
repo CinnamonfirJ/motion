@@ -218,7 +218,7 @@ export const api = {
     req<{ ok: boolean; momentId: string; clip: { url: string | null; durationSec: number; ready: boolean; manual: true } }>(`/streams/${streamId}/clip`, { method: "POST", body: JSON.stringify({ clientStreamTimeMs }) }),
   moments: () => req<{ moments: MomentDTO[] }>("/moments"),
   moment: (id: string) => req<{ moment: MomentDTO }>(`/moments/${id}`),
-  scoutEarnings: () => req<{ totalUsd: string; momentsCurated: number; firstFinds: number; rewards: any[] }>("/earnings/scout"),
-  creatorEarnings: () => req<{ totalUsd: string; momentsGenerated: number; payouts: any[] }>("/earnings/creator"),
+  scoutEarnings: () => req<{ totalUsd: string; totalMon?: string; pendingUsd?: string; momentsCurated: number; firstFinds: number; rewards: { momentId: string; streamTitle: string; rank: number; rewardUsd: string; status: string }[] }>("/earnings/scout"),
+  creatorEarnings: () => req<{ totalUsd: string; totalMon?: string; pendingUsd?: string; momentsGenerated: number; payouts: { momentId: string; streamTitle: string; foundingCuratorCount: number; rewardUsd: string; status: string }[] }>("/earnings/creator"),
   time: () => req<{ serverTime: number }>("/time"),
 };

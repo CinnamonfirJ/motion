@@ -15,23 +15,22 @@ export function Earnings() {
   }, []);
 
   const data = mode === "scout" ? scout : creator;
-  if (!data) return <Skeleton className="h-[60vh]" />;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-h1">Earnings</h1>
-        {creator?.momentsGenerated > 0 && (
-          <div className="flex border border-border">
-            {(["scout", "creator"] as const).map((m) => (
-              <button key={m} onClick={() => setMode(m)} className={`px-3 py-1.5 font-mono text-micro uppercase tracking-[0.1em] ${mode === m ? "bg-brand text-white" : "bg-surface1 text-text-secondary"}`}>
-                {m}
-              </button>
-            ))}
-          </div>
-        )}
+        <div role="tablist" aria-label="Earnings type" className="flex w-full border border-border sm:w-auto">
+          {(["scout", "creator"] as const).map((m) => (
+            <button key={m} type="button" role="tab" aria-selected={mode === m} onClick={() => setMode(m)} className={`min-h-11 flex-1 px-3 py-1.5 font-mono text-micro uppercase tracking-[0.1em] sm:flex-none ${mode === m ? "bg-brand text-white" : "bg-surface1 text-text-secondary"}`}>
+              {m}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {!data ? <Skeleton className="h-[60vh]" /> : (
+        <>
       {/* hero balance (design §7.16) */}
       <div className="relative border border-border bg-surface1 p-6">
         <span className="plusmark -left-[6px] -top-[6px]" />
@@ -88,6 +87,8 @@ export function Earnings() {
           </div>
         )}
       </section>
+        </>
+      )}
     </div>
   );
 }

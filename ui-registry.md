@@ -306,6 +306,26 @@ Last updated: 2026-09-24
 virtualized card and refresh when returning to the screen.
 The real profile image now occupies the established circular avatar position.
 
+### Earnings mode switch
+
+Files: `apps/web/src/screens/Earnings.tsx`, `apps/mobile/src/screens/Earnings.tsx`
+Last updated: 2026-10-12
+
+| Property | Web pattern | Mobile pattern |
+| --- | --- | --- |
+| Background | `bg-surface1`; selected `bg-brand` | `color.surface1`; selected `color.brand` |
+| Border | `border border-border` around the pair | `borderWidth: 1`, `borderColor: color.border` around the pair |
+| Border radius | none | none |
+| Text | `font-mono text-micro uppercase tracking-[0.1em]` | `eyebrow(11)` |
+| Selected text | `text-white` | `color.text` |
+| Unselected text | `text-text-secondary` | `color.textSecondary` |
+| Spacing | `px-3 py-1.5` | centered within a 48px minimum tap target |
+| Active state | brand fill and `aria-selected` | brand fill and selected accessibility state |
+| Shadow | none | none |
+| Accent usage | brand fill for selected mode | brand fill for selected mode |
+
+**Pattern notes:** Scout and Creator are always visible, including with no creator Moments or while data loads. On narrow screens, both options share the available width equally; the web heading stacks above the switch.
+
 ### Mobile account and Moment identity
 
 Files: `apps/mobile/src/screens/Profile.tsx`, `apps/mobile/src/screens/MomentDetail.tsx`,
