@@ -929,7 +929,7 @@ export async function registerRoutes(app: FastifyInstance) {
   // ---------- feeds & leaderboards (Envio-indexed onchain activity; local fallback) ----------
   app.get("/feeds/trending", async () => {
     const indexed = await trendingMoments(30);
-    if (indexed?.Moment?.length) {
+    if (indexed) {
       // Map Envio rows onto our local Moment DTOs where we still hold them (for clip/creator UI).
       const localByOnchainId = new Map(
         (await Moments.publicFeed(100)).map((moment) => [momentIdHash(moment.id).toLowerCase(), moment] as const)
@@ -945,7 +945,7 @@ export async function registerRoutes(app: FastifyInstance) {
 
   app.get("/leaderboard", async () => {
     const indexed = await topCurators(20);
-    if (indexed?.CuratorStats?.length) {
+    if (indexed) {
       const entries = indexed.CuratorStats.map((c, i) => ({
         rank: i + 1,
         walletAddress: c.id,

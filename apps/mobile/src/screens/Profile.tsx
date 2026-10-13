@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { Alert, Linking, ScrollView, Text, TextInput, View, Pressable } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { File } from "expo-file-system";
@@ -10,12 +11,25 @@ import { color, type, radius, eyebrow, monoText } from "../theme";
 
 export function Profile() {
   const { user, logout } = useSession();
-  const [scout, setScout] = useState<any>(null);
+  const nav = useNavigation<any>();
+  const [scout, setScout] = useState<Awaited<ReturnType<typeof api.scoutEarnings>> | null>(null);
+  const [creator, setCreator] = useState<Awaited<ReturnType<typeof api.creatorEarnings>> | null>(null);
+  const [earningsError, setEarningsError] = useState(false);
+  const [retryEarnings, setRetryEarnings] = useState(0);
   const [showWallet, setShowWallet] = useState(false);
   const [editing, setEditing] = useState(false);
-  useEffect(() => {
-    api.scoutEarnings().then(setScout).catch(() => {});
-  }, []);
+  useEffect(() => { setScout(null); setCreator(null); setEarningsError(false); }, [user?.id]);
+  useFocusEffect(useCallback(() => {
+    if (!user?.id) return;
+    let active = true;
+    void Promise.allSettled([api.scoutEarnings(), api.creatorEarnings()]).then(([scoutResult, creatorResult]) => {
+      if (!active) return;
+      if (scoutResult.status === "fulfilled") setScout(scoutResult.value);
+      if (creatorResult.status === "fulfilled") setCreator(creatorResult.value);
+      setEarningsError(scoutResult.status === "rejected" || creatorResult.status === "rejected");
+    });
+    return () => { active = false; };
+  }, [user?.id, retryEarnings]));
   if (!user) return null;
   if (editing) return <EditProfile onClose={() => setEditing(false)} />;
 
@@ -30,11 +44,14 @@ export function Profile() {
         <Button title="Edit profile" variant="secondary" onPress={() => setEditing(true)} />
       </View>
 
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        <Stat label="Found" value={String(scout?.momentsCurated ?? 0)} />
-        <Stat label="First finds" value={String(scout?.firstFinds ?? 0)} />
-        <Stat label="Earned" value={scout?.totalUsd ?? "$0"} />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+        <Stat label="Found" value={scout ? String(scout.momentsCurated) : "—"} />
+        <Stat label="First finds" value={scout ? String(scout.firstFinds) : "—"} />
+        <Stat label="Scout earned" value={scout?.totalUsd ?? "—"} />
+        <Stat label="Creator earned" value={creator?.totalUsd ?? "—"} />
       </View>
+      {earningsError && <Pressable accessibilityRole="button" onPress={() => setRetryEarnings((n) => n + 1)}><Text style={{ color: color.error, ...type.bodysm }}>Earnings could not fully refresh. Tap to retry.</Text></Pressable>}
+      <Button title="View earnings details" variant="secondary" onPress={() => nav.navigate("Earnings")} />
 
       <Card>
         <Pressable onPress={() => setShowWallet((v) => !v)} style={{ padding: 16, flexDirection: "row", justifyContent: "space-between" }}>
@@ -172,8 +189,8 @@ function EditProfile({ onClose }: { onClose: () => void }) {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <View style={{ flex: 1, backgroundColor: color.surface1, borderColor: color.border, borderWidth: 1, borderRadius: radius.md, padding: 12, alignItems: "center" }}>
-      <Text style={{ color: color.text, ...type.h3 }}>{value}</Text>
+    <View style={{ flexBasis: "47%", flexGrow: 1, minWidth: 0, backgroundColor: color.surface1, borderColor: color.border, borderWidth: 1, borderRadius: radius.md, padding: 12, alignItems: "center" }}>
+      <Text adjustsFontSizeToFit numberOfLines={1} style={{ color: color.text, ...type.h3 }}>{value}</Text>
       <Text style={{ color: color.textMuted, ...eyebrow(11), marginTop: 2 }}>{label}</Text>
     </View>
   );

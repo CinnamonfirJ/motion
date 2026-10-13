@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, ScrollView, Pressable, Image, RefreshControl, FlatList, TextInput } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { api, type FeedItemDTO, type CommunityDTO, type MomentDTO, type StreamDTO } from "../lib/api";
+import { api, type FeedItemDTO, type CommunityDTO, type MomentDTO, type StreamDTO, type TrendingResponse, type LeaderboardResponse } from "../lib/api";
 import { realtime } from "../lib/realtime";
 import { Avatar, Pill, EmptyState, ReactionGraph, ReactionMix, SectionIndex } from "../components/ui";
 import { color, type, radius, eyebrow } from "../theme";
@@ -53,6 +53,8 @@ export function Home() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [trending, setTrending] = useState<TrendingResponse | null>(null);
+  const [leaders, setLeaders] = useState<LeaderboardResponse | null>(null);
   const viewed = useRef(new Set<string>());
   const mode = tab === "following" ? "following" : "for-you";
   const selectedCommunity = tab === "communities" ? communityId ?? undefined : undefined;
@@ -81,6 +83,11 @@ export function Home() {
     };
   }, [load]));
   useEffect(() => { void api.communities().then((result) => setCommunities(result.communities)).catch(() => setCommunityError("Could not load communities.")); }, []);
+  const refreshOnchain = useCallback(() => {
+    void api.trending().then(setTrending).catch(() => setTrending(null));
+    void api.leaderboard().then(setLeaders).catch(() => setLeaders(null));
+  }, []);
+  useFocusEffect(useCallback(() => { refreshOnchain(); }, [refreshOnchain]));
   useEffect(() => {
     if (!communityId) { setMember(false); return; }
     void api.community(communityId).then((result) => setMember(result.community.member)).catch(() => setMember(false));
@@ -128,12 +135,21 @@ export function Home() {
       keyExtractor={(item) => `${item.type}:${item.post?.id ?? item.stream?.id ?? item.moment?.id}`}
       onViewableItemsChanged={onVisible}
       viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor={color.lime} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); refreshOnchain(); setRefreshing(false); }} tintColor={color.lime} />}
       ListHeaderComponent={<View style={{ gap: 14, marginBottom: 4 }}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}><View><Text style={{ color: color.lime, ...eyebrow(10) }}>Your world, live</Text><Text style={{ color: color.text, ...type.h1 }}>Feed</Text></View><Pressable accessibilityRole="button" onPress={() => nav.navigate("GoLive")} style={{ borderWidth: 1, borderColor: color.lime, padding: 10 }}><Text style={{ color: color.lime, ...eyebrow(10) }}>Go live</Text></Pressable></View>
         <View style={{ flexDirection: "row", borderWidth: 1, borderColor: color.border, backgroundColor: color.surface1 }}>{(["for-you", "following", "communities"] as const).map((item) => <Pressable key={item} accessibilityRole="tab" accessibilityState={{ selected: tab === item }} onPress={() => setTab(item)} style={{ flex: 1, paddingVertical: 12, alignItems: "center", backgroundColor: tab === item ? color.surface2 : color.surface1 }}><Text style={{ color: tab === item ? color.lime : color.textSecondary, ...eyebrow(10) }}>{item === "for-you" ? "For You" : item}</Text></Pressable>)}</View>
         {tab === "communities" ? <View style={{ backgroundColor: color.surface1, borderWidth: 1, borderColor: color.border, padding: 12, gap: 10 }}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}><Pressable onPress={() => setCommunityId(null)} style={{ borderWidth: 1, borderColor: !communityId ? color.lime : color.border, padding: 8 }}><Text style={{ color: !communityId ? color.lime : color.textSecondary, ...eyebrow(10) }}>Discover</Text></Pressable>{communities.map((community) => <Pressable key={community.id} onPress={() => setCommunityId(community.id)} style={{ borderWidth: 1, borderColor: communityId === community.id ? color.lime : color.border, padding: 8 }}><Text style={{ color: communityId === community.id ? color.lime : color.textSecondary, ...eyebrow(10) }}>{community.name}</Text></Pressable>)}</ScrollView>{selected ? <View style={{ gap: 6 }}><Text style={{ color: color.text, ...type.h3 }}>{selected.name}</Text><Text style={{ color: color.textSecondary, ...type.bodysm }}>{selected.description} · {selected.memberCount} members</Text><Pressable onPress={() => void toggleMembership()} style={{ alignSelf: "flex-start", borderWidth: 1, borderColor: color.border, padding: 8 }}><Text style={{ color: color.text, ...eyebrow(10) }}>{member ? "Leave" : "Join"}</Text></Pressable></View> : <View style={{ gap: 8 }}><Text style={{ color: color.textSecondary, ...type.bodysm }}>Public communities are open to discover. Join one to post there.</Text><TextInput placeholder="Community name" placeholderTextColor={color.textMuted} value={communityName} onChangeText={setCommunityName} style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, color: color.text, padding: 10 }} /><TextInput placeholder="Description" placeholderTextColor={color.textMuted} value={communityDescription} onChangeText={setCommunityDescription} style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, color: color.text, padding: 10 }} /><Pressable onPress={() => void createCommunity()} style={{ backgroundColor: color.brand, padding: 10, alignItems: "center" }}><Text style={{ color: color.text, ...eyebrow(10) }}>Create community</Text></Pressable></View>}{communityError ? <Text selectable style={{ color: color.error, ...type.bodysm }}>{communityError}</Text> : null}</View> : null}
         {tab !== "communities" || (communityId && member) ? <Pressable accessibilityRole="button" onPress={() => nav.navigate("CreatePost", { communityId: selectedCommunity })} style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface1, padding: 14, flexDirection: "row", alignItems: "center", gap: 10 }}><View style={{ width: 8, height: 8, backgroundColor: color.lime }} /><Text style={{ color: color.textSecondary, ...type.body }}>What's happening?</Text><Text style={{ marginLeft: "auto", color: color.lime, ...eyebrow(10) }}>Post</Text></Pressable> : null}
+        {tab === "for-you" && <View accessibilityLabel="Onchain activity" style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface1, padding: 14, gap: 8 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}><Text style={{ color: color.text, ...type.h3 }}>Onchain activity</Text><Pressable accessibilityRole="button" accessibilityLabel="Refresh onchain activity" onPress={refreshOnchain}><Text style={{ color: color.lime, ...eyebrow(10) }}>Refresh</Text></Pressable></View>
+          <Text style={{ color: color.textSecondary, ...type.bodysm }}>{trending?.source === "envio" ? "Moments indexed from Monad by Envio" : "Recent Moments from ENNOIA · indexed activity unavailable"}</Text>
+          {(trending?.moments ?? []).slice(0, 3).map((moment) => "clip" in moment
+            ? <Pressable key={moment.id} accessibilityRole="button" onPress={() => nav.navigate("MomentDetail", { id: moment.id })} style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, padding: 10 }}><Text style={{ color: color.text, ...type.bodysm }}>{moment.streamTitle} · {moment.foundingCuratorCount} founding curators →</Text></Pressable>
+            : <View key={moment.id} style={{ borderWidth: 1, borderColor: color.border, backgroundColor: color.surface2, padding: 10 }}><Text style={{ color: color.text, ...type.bodysm }}>Monad Moment {moment.id.slice(0, 10)}… · {moment.foundingCuratorCount} founding curators · {moment.settled ? "settled" : "pending"}</Text></View>)}
+          {trending && trending.moments.length === 0 && <Text style={{ color: color.textMuted, ...type.bodysm }}>No onchain Moments yet.</Text>}
+          {leaders && leaders.entries.length > 0 && <View style={{ borderTopWidth: 1, borderColor: color.border, paddingTop: 8, gap: 4 }}><Text style={{ color: color.textMuted, ...eyebrow(10) }}>{leaders.source === "envio" ? "Top scouts · Monad indexed" : "Top scouts · local activity"}</Text>{leaders.entries.slice(0, 3).map((entry) => <Text key={`${entry.rank}:${entry.walletAddress ?? entry.displayName}`} style={{ color: color.textSecondary, ...type.bodysm }}>#{entry.rank} {entry.displayName ?? (entry.walletAddress ? `${entry.walletAddress.slice(0, 6)}…${entry.walletAddress.slice(-4)}` : "Scout")} · {entry.firstFinds} first finds</Text>)}</View>}
+        </View>}
         {error ? <Pressable onPress={() => void load()} style={{ borderWidth: 1, borderColor: color.error, padding: 10 }}><Text selectable style={{ color: color.error, ...type.bodysm }}>{error} Tap to retry.</Text></Pressable> : null}
       </View>}
       renderItem={({ item }) => item.type === "post" && item.post ? <PostCard post={item.post} onChanged={() => void load()} onOpen={() => nav.navigate("PostDetail", { id: item.post!.id })} onAuthor={(id) => nav.navigate("PublicProfile", { id })} onQuote={(id) => nav.navigate("CreatePost", { quotePostId: id })} /> : item.type === "stream" && item.stream ? <StreamFeedCard stream={item.stream} onPress={() => nav.navigate("Live", { id: item.stream!.id })} /> : item.type === "moment" && item.moment ? <MomentCard moment={item.moment} onPress={() => nav.navigate("MomentDetail", { id: item.moment!.id })} /> : null}
