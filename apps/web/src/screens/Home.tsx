@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, type CommunityDTO, type FeedItemDTO, type MomentDTO, type StreamDTO } from "../lib/api";
+import { api, type CommunityDTO, type FeedItemDTO, type MomentDTO, type StreamDTO, type TrendingResponse, type LeaderboardResponse } from "../lib/api";
 import { realtime } from "../lib/realtime";
 import { useSession } from "../state/session";
 import { Avatar, EmptyState, LivePill, Pill } from "../components/ui";
@@ -61,6 +61,8 @@ export function Home() {
   const [moments, setMoments] = useState<MomentDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [trending, setTrending] = useState<TrendingResponse | null>(null);
+  const [leaders, setLeaders] = useState<LeaderboardResponse | null>(null);
 
   const mode = tab === "following" ? "following" : "for-you";
   const selectedCommunity = tab === "communities" ? communityId ?? undefined : undefined;
@@ -88,6 +90,11 @@ export function Home() {
       .catch(() => {}); // Optional composer embeds must not delay or hide the feed.
   }, []);
   useEffect(() => { void api.communities().then((result) => setCommunities(result.communities)).catch(() => setCommunityError("Could not load communities.")); }, []);
+  const refreshOnchain = useCallback(() => {
+    void api.trending().then(setTrending).catch(() => setTrending(null));
+    void api.leaderboard().then(setLeaders).catch(() => setLeaders(null));
+  }, []);
+  useEffect(() => { refreshOnchain(); }, [refreshOnchain]);
   useEffect(() => {
     if (!communityId) { setMember(false); return; }
     void api.community(communityId).then((result) => setMember(result.community.member)).catch(() => setMember(false));
@@ -128,6 +135,15 @@ export function Home() {
       {communityError && <p role="alert" className="text-bodysm text-error">{communityError}</p>}
     </section>}
     {user && (tab !== "communities" || (communityId && member)) && <PostComposer user={user} communityId={selectedCommunity} streams={streams} moments={moments} onPublished={() => void refresh()} />}
+    {tab === "for-you" && <section className="space-y-3 border border-border bg-surface1 p-4" aria-label="Onchain activity">
+      <div className="flex items-center justify-between gap-2"><h2 className="text-h3">Onchain activity</h2><button className="font-mono text-micro uppercase text-leaf" onClick={refreshOnchain}>Refresh</button></div>
+      <p className="text-bodysm text-text-secondary">{trending?.source === "envio" ? "Moments indexed from Monad by Envio" : "Recent Moments from ENNOIA · indexed activity unavailable"}</p>
+      {(trending?.moments ?? []).slice(0, 3).map((moment) => "clip" in moment
+        ? <Link key={moment.id} to={`/moments/${moment.id}`} className="block border border-border bg-surface2 p-3 text-bodysm text-text hover:border-borderStrong">{moment.streamTitle} · {moment.foundingCuratorCount} founding curators →</Link>
+        : <div key={moment.id} className="border border-border bg-surface2 p-3 text-bodysm text-text">Monad Moment {moment.id.slice(0, 10)}… · {moment.foundingCuratorCount} founding curators · {moment.settled ? "settled" : "pending"}</div>)}
+      {trending && trending.moments.length === 0 && <p className="text-bodysm text-text-muted">No onchain Moments yet.</p>}
+      {leaders && leaders.entries.length > 0 && <div className="border-t border-border pt-3"><p className="font-mono text-micro uppercase text-text-muted">{leaders.source === "envio" ? "Top scouts · Monad indexed" : "Top scouts · local activity"}</p><div className="mt-2 space-y-1">{leaders.entries.slice(0, 3).map((entry) => <p key={`${entry.rank}:${entry.walletAddress ?? entry.displayName}`} className="text-bodysm text-text-secondary">#{entry.rank} {entry.displayName ?? (entry.walletAddress ? `${entry.walletAddress.slice(0, 6)}…${entry.walletAddress.slice(-4)}` : "Scout")} · {entry.firstFinds} first finds</p>)}</div></div>}
+    </section>}
     {error && <div role="alert" className="border border-error bg-surface1 p-3 text-bodysm text-error">{error} <button className="ml-2 underline" onClick={() => void refresh()}>Retry</button></div>}
     {items === null ? <div className="border border-border bg-surface1 p-8 text-center text-text-secondary">Loading feed…</div> : items.length === 0 ? <EmptyState title={tab === "following" ? "Your Following feed is quiet." : tab === "communities" ? "No posts here yet." : "Your feed is just getting started."} body={tab === "following" ? "Follow people to see their posts, live streams, and Moments here." : "Start a conversation or come back when something goes live."} /> : <div className="space-y-4">{items.map((item) => item.type === "post" && item.post ? <PostCard key={`post:${item.post.id}`} post={item.post} onChanged={() => void refresh()} /> : item.type === "stream" && item.stream ? <StreamCard key={`stream:${item.stream.id}`} stream={item.stream} /> : item.type === "moment" && item.moment ? <MomentCard key={`moment:${item.moment.id}`} moment={item.moment} /> : null)}</div>}
     {nextBefore && <button className="w-full border border-border bg-surface1 px-4 py-3 font-mono text-micro uppercase text-text-secondary hover:text-text disabled:opacity-40" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "Loading…" : "Load more"}</button>}

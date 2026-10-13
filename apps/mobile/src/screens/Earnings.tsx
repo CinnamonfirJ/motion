@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { api } from "../lib/api";
+import { api, type RewardHistoryResponse } from "../lib/api";
 import { Button, Card, EmptyState, PlusMark, StatusRow } from "../components/ui";
 import { color, eyebrow, radius, type } from "../theme";
 
@@ -17,6 +17,7 @@ export function Earnings() {
   const [scoutError, setScoutError] = useState(false);
   const [creatorError, setCreatorError] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [history, setHistory] = useState<RewardHistoryResponse | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -30,6 +31,13 @@ export function Earnings() {
     };
     load();
     const id = setInterval(load, 6000);
+    return () => { active = false; clearInterval(id); };
+  }, [retry]);
+  useEffect(() => {
+    let active = true;
+    const load = () => { void api.rewardHistory().then((data) => { if (active) setHistory(data); }).catch(() => { if (active) setHistory(null); }); };
+    load();
+    const id = setInterval(load, 60_000);
     return () => { active = false; clearInterval(id); };
   }, [retry]);
 
@@ -72,6 +80,11 @@ export function Earnings() {
         !error && <ActivityIndicator color={color.lime} accessibilityLabel={`Loading ${mode} earnings`} />
       ) : (
         <>
+          <Card style={{ padding: 16, gap: 6 }}>
+            <Text style={{ color: color.text, ...type.h3 }}>Monad reward record</Text>
+            {history?.source === "envio" ? <><Text style={{ color: color.textSecondary, ...type.bodysm }}>Indexed by Envio from onchain payouts</Text><Text selectable style={{ color: color.lime, ...type.h3 }}>{formatMonWei(mode === "scout" ? history.curator?.totalRewards : history.creator?.totalRewards)} MON</Text><Text style={{ color: color.textMuted, ...eyebrow(11) }}>{mode === "scout" ? `${history.curator?.firstFinds ?? 0} first finds · ${history.curator?.momentsCurated ?? 0} Moments curated` : `${history.creator?.momentsGenerated ?? 0} Moments generated · ${formatMonWei(history.creator?.totalTips)} MON tips`}</Text></>
+              : <Text style={{ color: color.textSecondary, ...type.bodysm }}>Indexed reward data is unavailable. Recent rewards below come from ENNOIA.</Text>}
+          </Card>
           <Card style={{ padding: 24 }}>
             <PlusMark style={{ left: -6, top: -6 }} />
             <PlusMark style={{ right: -6, top: -6 }} />
@@ -113,6 +126,13 @@ export function Earnings() {
       )}
     </ScrollView>
   );
+}
+
+function formatMonWei(value: string | undefined): string {
+  try {
+    const wei = BigInt(value ?? "0");
+    return `${wei / 1_000_000_000_000_000_000n}.${((wei % 1_000_000_000_000_000_000n) / 100_000_000_000_000n).toString().padStart(4, "0")}`;
+  } catch { return "0.0000"; }
 }
 
 function Stat({ label, value }: { label: string; value: number }) {

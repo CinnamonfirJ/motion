@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, type RewardHistoryResponse } from "../lib/api";
 import { Card, Skeleton, EmptyState, StatusRow, Button } from "../components/ui";
 import { ordinal } from "../lib/format";
 
@@ -8,10 +8,12 @@ export function Earnings() {
   const [mode, setMode] = useState<"scout" | "creator">("scout");
   const [scout, setScout] = useState<any>(null);
   const [creator, setCreator] = useState<any>(null);
+  const [history, setHistory] = useState<RewardHistoryResponse | null>(null);
 
   useEffect(() => {
     api.scoutEarnings().then(setScout).catch(() => setScout({ totalUsd: "$0.00", momentsCurated: 0, firstFinds: 0, rewards: [] }));
     api.creatorEarnings().then(setCreator).catch(() => setCreator({ totalUsd: "$0.00", momentsGenerated: 0, payouts: [] }));
+    api.rewardHistory().then(setHistory).catch(() => setHistory(null));
   }, []);
 
   const data = mode === "scout" ? scout : creator;
@@ -31,6 +33,11 @@ export function Earnings() {
 
       {!data ? <Skeleton className="h-[60vh]" /> : (
         <>
+      <section className="border border-border bg-surface1 p-4" aria-label="Indexed rewards">
+        <h2 className="text-h3">Monad reward record</h2>
+        {history?.source === "envio" ? <><p className="mt-1 text-bodysm text-text-secondary">Indexed by Envio from onchain payouts</p><p className="mt-3 text-h3 tabular-nums">{formatMonWei(mode === "scout" ? history.curator?.totalRewards : history.creator?.totalRewards)} MON</p><p className="font-mono text-micro uppercase text-text-muted">{mode === "scout" ? `${history.curator?.firstFinds ?? 0} first finds · ${history.curator?.momentsCurated ?? 0} Moments curated` : `${history.creator?.momentsGenerated ?? 0} Moments generated · ${formatMonWei(history.creator?.totalTips)} MON tips`}</p></>
+          : <p className="mt-2 text-bodysm text-text-secondary">Indexed reward data is unavailable. Recent rewards below come from ENNOIA.</p>}
+      </section>
       {/* hero balance (design §7.16) */}
       <div className="relative border border-border bg-surface1 p-6">
         <span className="plusmark -left-[6px] -top-[6px]" />
@@ -91,6 +98,13 @@ export function Earnings() {
       )}
     </div>
   );
+}
+
+function formatMonWei(value: string | undefined): string {
+  try {
+    const wei = BigInt(value ?? "0");
+    return `${wei / 1_000_000_000_000_000_000n}.${((wei % 1_000_000_000_000_000_000n) / 100_000_000_000_000n).toString().padStart(4, "0")}`;
+  } catch { return "0.0000"; }
 }
 
 function Stat({ label, value }: { label: string; value: number }) {

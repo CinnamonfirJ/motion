@@ -141,6 +141,30 @@ export interface FeedItemDTO {
   stream?: StreamDTO;
   moment?: MomentDTO;
 }
+export interface OnchainMomentDTO {
+  id: string;
+  streamId: string;
+  category: number;
+  foundingCuratorCount: number;
+  settled: boolean;
+}
+export interface TrendingResponse { source: "envio" | "local"; moments: (MomentDTO | OnchainMomentDTO)[] }
+export interface LeaderboardEntryDTO {
+  rank: number;
+  walletAddress: string | null;
+  totalUnits: string;
+  totalUsd: string;
+  firstFinds: number;
+  momentsCurated: number;
+  displayName?: string;
+  handle?: string | null;
+}
+export interface LeaderboardResponse { source: "envio" | "local"; entries: LeaderboardEntryDTO[] }
+export interface RewardHistoryResponse {
+  source: "envio" | "local";
+  curator: { id: string; totalRewards: string; firstFinds: number; momentsCurated: number } | null;
+  creator: { id: string; totalRewards: string; momentsGenerated: number; totalTips: string } | null;
+}
 export interface CommunityDTO { id: string; slug: string; name: string; description: string; memberCount: number }
 export interface ChatMessageDTO {
   id: string;
@@ -188,6 +212,9 @@ export const api = {
   deleteChat: (id: string, messageId: string) => req<{ ok: boolean }>(`/streams/${id}/chat/${messageId}`, { method: "DELETE" }),
   feed: (mode: "for-you" | "following", before?: number, communityId?: string) =>
     req<{ items: FeedItemDTO[]; nextBefore: number | null }>(`/feed?${new URLSearchParams({ mode, ...(before ? { before: String(before) } : {}), ...(communityId ? { communityId } : {}) })}`),
+  trending: () => req<TrendingResponse>("/feeds/trending"),
+  leaderboard: () => req<LeaderboardResponse>("/leaderboard"),
+  rewardHistory: () => req<RewardHistoryResponse>("/rewards/history"),
   post: (id: string) => req<{ post: PostDTO }>(`/posts/${id}`),
   deletePost: (id: string) => req<{ ok: boolean }>(`/posts/${id}`, { method: "DELETE" }),
   replies: (id: string) => req<{ posts: PostDTO[] }>(`/posts/${id}/replies`),

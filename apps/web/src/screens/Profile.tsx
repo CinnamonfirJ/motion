@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useSession } from "../state/session";
 import { api } from "../lib/api";
 import { Avatar, Card, Button } from "../components/ui";
@@ -8,14 +9,26 @@ import { SigningDetails } from "../components/SigningSession";
 
 export function Profile() {
   const { user, logout } = useSession();
-  const [scout, setScout] = useState<any>(null);
+  const [scout, setScout] = useState<Awaited<ReturnType<typeof api.scoutEarnings>> | null>(null);
+  const [creator, setCreator] = useState<Awaited<ReturnType<typeof api.creatorEarnings>> | null>(null);
+  const [earningsError, setEarningsError] = useState(false);
+  const [retryEarnings, setRetryEarnings] = useState(0);
   const [showWallet, setShowWallet] = useState(false);
   const [theme, setThemeState] = useState<Theme>(getTheme());
   const [editing, setEditing] = useState(false);
 
+  useEffect(() => { setScout(null); setCreator(null); setEarningsError(false); }, [user?.id]);
   useEffect(() => {
-    api.scoutEarnings().then(setScout).catch(() => {});
-  }, []);
+    if (!user?.id) return;
+    let active = true;
+    void Promise.allSettled([api.scoutEarnings(), api.creatorEarnings()]).then(([scoutResult, creatorResult]) => {
+      if (!active) return;
+      if (scoutResult.status === "fulfilled") setScout(scoutResult.value);
+      if (creatorResult.status === "fulfilled") setCreator(creatorResult.value);
+      setEarningsError(scoutResult.status === "rejected" || creatorResult.status === "rejected");
+    });
+    return () => { active = false; };
+  }, [user?.id, retryEarnings]);
 
   const changeTheme = (t: Theme) => {
     setTheme(t);
@@ -35,11 +48,14 @@ export function Profile() {
         <Button variant="secondary" onClick={() => setEditing(true)}>Edit profile</Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <Stat label="Found" value={scout?.momentsCurated ?? 0} />
-        <Stat label="First finds" value={scout?.firstFinds ?? 0} />
-        <Stat label="Earned" value={scout?.totalUsd ?? "$0"} />
+      <div className="grid grid-cols-2 gap-3">
+        <Stat label="Found" value={scout?.momentsCurated ?? "—"} />
+        <Stat label="First finds" value={scout?.firstFinds ?? "—"} />
+        <Stat label="Scout earned" value={scout?.totalUsd ?? "—"} />
+        <Stat label="Creator earned" value={creator?.totalUsd ?? "—"} />
       </div>
+      {earningsError && <p role="alert" className="text-bodysm text-error">Earnings could not fully refresh. <button className="underline" onClick={() => setRetryEarnings((n) => n + 1)}>Retry</button></p>}
+      <Link to="/earnings" className="block text-center font-mono text-micro uppercase text-leaf">View earnings details →</Link>
 
       <Card className="divide-y divide-border">
         <Row label="Account" onClick={() => setShowWallet((v) => !v)} value={showWallet ? "Hide" : "Onchain account"} />

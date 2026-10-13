@@ -6,7 +6,7 @@ import { env, envioConfigured } from "./env.js";
  * leaderboards and reward history.
  *
  * Envio is NOT the application database — offchain data (identity, streams, reactions, Moment
- * lifecycle) stays in SQLite. When `ENVIO_GRAPHQL_URL` is blank every function returns null and
+ * lifecycle) stays in Neon. When `ENVIO_GRAPHQL_URL` is blank every function returns null and
  * callers fall back to local aggregates, so the app runs with or without a running indexer.
  */
 
@@ -21,6 +21,7 @@ async function query<T>(gql: string, variables: Record<string, unknown> = {}): P
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: gql, variables }),
+      signal: AbortSignal.timeout(5_000),
     });
     if (!res.ok) throw new Error(`envio ${res.status}`);
     const body = (await res.json()) as { data?: T; errors?: unknown };

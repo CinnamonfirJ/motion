@@ -326,6 +326,43 @@ Last updated: 2026-10-12
 
 **Pattern notes:** Scout and Creator are always visible, including with no creator Moments or while data loads. On narrow screens, both options share the available width equally; the web heading stacks above the switch.
 
+### Indexed activity and reward record
+
+Files: `apps/web/src/screens/Home.tsx`, `apps/mobile/src/screens/Home.tsx`,
+`apps/web/src/screens/Earnings.tsx`, `apps/mobile/src/screens/Earnings.tsx`
+Last updated: 2026-10-13
+
+| Property | Web pattern | Mobile pattern |
+| --- | --- | --- |
+| Surface | `bg-surface1` with `border-border` | `color.surface1` with `color.border` |
+| Text | `text-text`, secondary `text-text-secondary` | `color.text`, secondary `color.textSecondary` |
+| Indexed status | Explicit Envio/Monad label | Explicit Envio/Monad label |
+| Fallback | Say when indexed data is unavailable | Same copy and behavior |
+| Onchain-only Moment | Non-clickable record | Non-clickable record |
+| Spacing | 12–16px | 8–16px |
+
+**Pattern notes:** The social feed remains locally ordered; its For You header separately
+shows indexed Moments and scout rankings. Earnings retains ENNOIA's recent reward rows
+and adds a distinct onchain aggregate, so the two sources are never conflated.
+
+### Own-profile earnings stats
+
+Files: `apps/web/src/screens/Profile.tsx`, `apps/mobile/src/screens/Profile.tsx`
+Last updated: 2026-10-13
+
+| Property | Web pattern | Mobile pattern |
+| --- | --- | --- |
+| Surface | shared `Card`, `bg-surface1` | `color.surface1` |
+| Border | shared `Card` border | `borderWidth: 1`, `color.border` |
+| Border radius | shared `Card` | `radius.md` |
+| Values | `text-h3 tabular-nums` | `type.h3`, one-line fitted |
+| Labels | `text-micro text-text-muted` | `eyebrow(11)`, `color.textMuted` |
+| Spacing | `p-3`, `gap-3` | `padding: 12`, `gap: 12` |
+| Accent | `text-leaf` for earnings link | secondary button for earnings detail |
+
+**Pattern notes:** Scout and Creator paid totals occupy separate tiles. An em dash means
+loading or unavailable, never a fabricated zero; a failed refresh exposes retry.
+
 ### Mobile account and Moment identity
 
 Files: `apps/mobile/src/screens/Profile.tsx`, `apps/mobile/src/screens/MomentDetail.tsx`,
